@@ -68,8 +68,8 @@ sub initialize {
 		});
 		push @menus, $submenu;
 	}
-	my %buttons;
 	my $bottom = $self->{window}->Frame->pack(-side => 'bottom');
+	my %buttons;
 	$buttons{'ok'} = $bottom->Button(-text => 'OK',
 	            	-command => sub { $self->commit })->pack(-side => "left", -expand=>1);
 	$buttons{'cancel'} = $bottom->Button(-text => 'Cancel',

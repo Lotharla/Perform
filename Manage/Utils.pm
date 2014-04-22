@@ -5,7 +5,7 @@ use warnings;
 no warnings 'experimental';
 use feature qw(say switch);
 use Scalar::Util qw(looks_like_number);
-use File::Basename qw(dirname basename);
+use File::Basename qw(dirname basename fileparse);
 use File::Temp;
 use Data::Dump qw(dump pp);
 use Test::More;
@@ -31,6 +31,7 @@ use Exporter::Easy (
 		_flip_hash
 		_persist_hash
 		_iterate_sorted_values
+		_fileparse
 		_files_in_dir
 		_is_glob
 		_glob_match
@@ -214,10 +215,21 @@ sub _iterate_sorted_values {
 	}
 }
 
+sub _fileparse {
+	fileparse(shift, qr/\.[^.]*/);
+}
+
 sub _files_in_dir {
 	my $dir = shift;
+	my $full = shift;
 	opendir(DIR, $dir) || die "Can't open directory : $!\n";
 	my @list = grep !/^\.\.?$/, readdir(DIR);
+	if ($full) {
+		use File::Spec::Functions qw(catfile);
+		for (my $i = 0; $i < scalar(@list); $i++) {
+			$list[$i] = catfile($dir, $list[$i]);
+		}
+	}
 	closedir(DIR);
 	return @list;
 }
@@ -248,7 +260,7 @@ sub _glob_match {
 sub _contents_of_file {
 	my $file = shift;
 	open my $fh, '<:encoding(UTF-8)', "$file" || die "Can't open file : $!\n";
-	local $/ = undef;	
+	local $/ = undef;    # slurp mode
 	my $contents = <$fh>;
 	close $fh;
 	return $contents;
@@ -435,7 +447,7 @@ sub _message {
 sub _text {
 	my( $title, $text)= @_;
 	my $top = _tkinit 1, $title;
-	my $txt = $top -> Scrolled("Text", -scrollbars => 'e');
+	my $txt = $top->Scrolled("Text", -scrollbars => 'e');
 	$txt->pack(-side => 'left', -fill => 'both', -expand => 1);
 	$txt->insert('end', $text);
 	_center_window $top;

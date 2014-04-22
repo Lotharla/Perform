@@ -15,18 +15,23 @@ use Manage::Utils qw(
 	_value_or_else 
 	_tempFilename
 	_capture_output
+	_diagnostic
 	_tkinit
 	_center_window
 	_text
 );
 use Manage::Composer;
+use Manage::ViewComposite;
 my $terminal = `gconftool-2 -g /desktop/gnome/applications/terminal/exec`;
 $terminal = _chomp($terminal);
 sub terminalize {
+	my $title = $_[0];
+	$title =~ s/\"//g;
 	my $output = $_[0];
 	$output =~ s/\t/ /g;
+	$output =~ s/\"/\\"/g;
 	$output = "bash -c '" . $output . " | less'";
-	return _combine( "$terminal", "-t", sprintf("\"%s\"", $_[0]), "-e", "\"$output\"" );
+	return _combine( "$terminal", "-t", sprintf("\"%s\"", $title), "-e", "\"$output\"" );
 }
 my $modifier;
 my $command = _capture_output(
@@ -63,9 +68,11 @@ if ($command) {
 			perform terminalize($command)
 		}
 		when ('Control') {
-			my $file = _tempFilename 'outXXXX', "/tmp/out";
-			my $text = _capture_output [\&perform_2, $command], $file;
-			_text $file, $text;
+			my $dir = "/tmp/out";
+			my $file = _tempFilename 'outXXXX', $dir;
+			_capture_output [\&perform_2, $command], $file;
+			new ViewComposite('title', $command, 'params', [$file]);
+			MainLoop();
 		}
 		default {
 			perform $command

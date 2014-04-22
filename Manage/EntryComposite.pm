@@ -10,12 +10,10 @@ use Cwd qw(abs_path cwd);
 use lib dirname(dirname abs_path $0);
 use Manage::Utils qw(
 	dump pp
-	looks_like_number
 	_value_or_else
 	_indexOf
 	_getenv
 	_now
-	_binsearch_alpha
 	_tkinit
 	_center_window
 	_set_selection
@@ -24,35 +22,29 @@ use Manage::Utils qw(
 	_popup_menu
 );
 use Manage::PersistHash;
+use Manage::Composite;
+our @ISA = qw(Composite);
 sub new {
 	my $class = shift;
-	my $self = {@_};
-	bless($self, $class);
-	$self->initialize;
-	return $self;
-}
-sub mode {
-	my $self = shift;
-	return exists $self->{params} ? 1 : 
-		($self->file() && -f $self->file() ? 2 : 0);
+    my $self = $class->SUPER::new(@_);
+	return bless($self, $class);
 }
 sub initialize {
 	my $self = shift;
-	my $title = _value_or_else('', $self->{title});
-	$self->{window} = _value_or_else(sub{_tkinit(0, $title)}, $self->{window});
-	my $width = _value_or_else(50, $self->{width});
+    $self->SUPER::initialize();
 	my $mode = $self->mode;
 	if ($mode == 0) {
 		$self->{widget} = $self->{window}->LabEntry(
 			-label => $self->{label}, -labelPack => [ -side => "left" ],
-			-width => $width,
+			-width => $self->{width},
 			-takefocus => 1,
 			-textvariable => \$self->{item});
 		$self->{entry} = $self->{widget}->Subwidget("entry");
 	} else {
-		$self->{widget} = $self->{window}->BrowseEntry(
-			-label => $self->{label}, -labelPack => [ -side => "left" ],
-			-width => $width,
+		my $top = $self->{window}->Frame->pack(-side => 'top', -fill=>'x', -expand=>1);
+		$top->Label(-text => $self->{label})->pack(-side => "left");
+		$self->{widget} = $top->BrowseEntry(
+			-width => $self->{width},
 			-takefocus => 1,
 			-variable => \$self->{item});
 		$self->{listbox} = $self->{widget}->Subwidget('slistbox')->Subwidget('scrolled');
@@ -62,8 +54,6 @@ sub initialize {
 		$self->{listbox}->bind('<<ListboxSelect>>' => sub{ $self->change_history }) if $mode > 1;
 	}
 	$self->{widget}->pack(-fill=>'x', -expand=>1);
-	$self->{window}->bind('<KeyPress-Escape>', sub {cancel($self)});
-	$self->{window}->bind('<KeyPress-Return>', sub {$self->commit()});
 	$self->{window}->bind('<Control-KeyPress-Up>', sub {$self->move_entry(-1)});
 	$self->{window}->bind('<Control-KeyPress-Down>', sub {$self->move_entry(+1)});
 	if ($mode > 0) {
@@ -88,7 +78,6 @@ sub initialize {
 	);
 	_set_selection($self->{entry});
 }
-sub file { $_[0]->{file}=$_[1] if defined $_[1]; $_[0]->{file} }
 sub item { $_[0]->{item}=$_[1] if defined $_[1]; $_[0]->{item} }
 sub give {
 	my $self = shift;
@@ -250,15 +239,7 @@ sub commit {
 	$self->historize($self->item);
 	my $output = _value_or_else '', $self->item;
 	print $output;
-	$self->cancel
-}
-sub finalize {
-	my $self = shift;
-}
-sub cancel {
-	my $self = shift;
-	$self->finalize;
-	$self->{window}->destroy();
+    $self->SUPER::commit();
 }
 given (_value_or_else(0, _getenv('test'))) {
 	when ($_ > 1) {
@@ -267,8 +248,8 @@ given (_value_or_else(0, _getenv('test'))) {
 		MainLoop();
 	}
 	when ($_ > 0) {
-		my @paths = split( /:/, $ENV{PATH});
-		my $ec = new EntryComposite('params', \@paths);
+		my @paths = sort split( /:/, $ENV{PATH});
+		my $ec = new EntryComposite('label', 'Path', 'params', \@paths);
 		$ec->give(cwd());
 		MainLoop();
 	}

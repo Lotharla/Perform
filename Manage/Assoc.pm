@@ -6,7 +6,6 @@ use feature qw(say switch);
 use Tk;
 use Tk::MListbox;
 use Tk::DialogBox;
-use File::Basename;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(dirname abs_path $0);
@@ -17,8 +16,9 @@ use Manage::Utils qw(
 	_flip_hash 
 	_is_glob
 	_glob_match
-	_set_selection 
+	_fileparse
 	_tkinit
+	_set_selection 
 );
 use Manage::PersistHash;
 use Exporter::Easy (
@@ -56,7 +56,7 @@ sub update_assoc {
 }
 sub find_assoc {
 	my $glob = shift;
-	my(@parts) = fileparse($glob, qr/\.[^.]*/);
+	my(@parts) = _fileparse($glob);
 	$parts[1] = $parts[0] . $parts[2];
 	my %assoc = %{assoc_ref()};
 	foreach (keys %assoc) {

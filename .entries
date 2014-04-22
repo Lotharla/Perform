@@ -8,7 +8,7 @@
                              },
                "find"     => {
                                "find-files"    => "find \"\${1}\" -name \"\${GLOB}\" 2>/dev/null",
-                               "find-in-files" => "find \"\${DIR}\" -name \"\${GLOB}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null",
+                               "find-in-files" => "find \"\${1}\" -name \"\${GLOB}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null",
                              },
                "firefox"  => "firefox \"\$1\"",
                "java"     => "bash /home/lotharla/work/bin/java-compile-and-run.sh \"\$1\"",
@@ -27,8 +27,8 @@
                ".xml"        => "firefox",
                "build.xml"   => "ant",
                "GNUmakefile" => "make",
-               "Makefile"    => "make",
                "makefile"    => "make",
+               "Makefile"    => "make",
              },
   history => {
                "1397838064.47615" => "find \"~/work/perl\" -name \"dress*.*\" 2>/dev/null",
@@ -37,6 +37,6 @@
                "1398119476.62787" => "perl \"/home/lotharla/.cpan/build/Tk-804.032-pVR0rJ/t/font.t\"",
                "1398121349.58922" => "bash \"/home/lotharla/work/bin/run-command.sh\"",
                "1398121435.56555" => "bash \"/home/lotharla/work/bin/devel.sh\"",
-               "1398125652.51628" => "find \"/home/lotharla/work/perl\" -name \"*.p*\" -print | xargs grep -e \"bless\" 2>/dev/null",
+               "1398165235.64183" => "find \"/home/lotharla/work/perl\" -name \"*.p*\" -print | xargs grep -e \"bless\" 2>/dev/null",
              },
 }
