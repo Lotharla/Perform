@@ -137,7 +137,7 @@ sub _getenv {
 		}
 		my @values = split(/$_separator[1]/, $value);
 		return @values if scalar(@values) > 1;
-		$value
+		$values[0]
 	} else {
 		$default
 	}

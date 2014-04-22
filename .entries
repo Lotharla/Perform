@@ -38,5 +38,9 @@
                "1398121349.58922" => "bash \"/home/lotharla/work/bin/run-command.sh\"",
                "1398121435.56555" => "bash \"/home/lotharla/work/bin/devel.sh\"",
                "1398165235.64183" => "find \"/home/lotharla/work/perl\" -name \"*.p*\" -print | xargs grep -e \"bless\" 2>/dev/null",
+               "1398167542.45181" => "meld\t\"/tmp/diag/j6wn8YGgUO\"\t\"/tmp/diag/OZYz3NUvmx\"",
+               "1398167768.98231" => "meld\t\"/tmp/diag/_aAQjy312E\"\t\"/tmp/diag/j6wn8YGgUO\"",
+               "1398178541.26957" => "chmod a+x \"/home/lotharla/work/manage/viewer.pl\"",
+               "1398179023.94305" => "bash \"/home/lotharla/work/bin/show-me.sh\"",
              },
 }
