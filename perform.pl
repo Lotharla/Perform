@@ -1,20 +1,75 @@
-#!/usr/bin/perl -w
-
+#!/usr/local/bin/perl
 use strict;
 use warnings;
+no warnings 'experimental';
 use feature qw(say switch);
-
-require "$ENV{HOME}/work/bin/utils.pl";
-
-$ENV{'title'} = value_or_else("Perform ...", 'title', \%ENV);
-
-my $command = capture_output(
+use Tk;
+use File::Basename qw(dirname);
+use Cwd qw(abs_path);
+use lib dirname(abs_path $0);
+use Manage::Utils qw(
+	dump 
+	_chomp
+	_combine
+	_getenv 
+	_value_or_else 
+	_tempFilename
+	_capture_output
+	_tkinit
+	_center_window
+	_text
+);
+use Manage::Composer;
+my $terminal = `gconftool-2 -g /desktop/gnome/applications/terminal/exec`;
+$terminal = _chomp($terminal);
+sub terminalize {
+	my $output = $_[0];
+	$output =~ s/\t/ /g;
+	$output = "bash -c '" . $output . " | less'";
+	return _combine( "$terminal", "-t", sprintf("\"%s\"", $_[0]), "-e", "\"$output\"" );
+}
+my $modifier;
+my $command = _capture_output(
 	sub {
-		local @ARGV = ("$ENV{HOME}/work/bin/.entries");
-		do "$ENV{HOME}/work/bin/entry.pl";
+		my $title = _getenv('title', "Perform ...");
+		my $label = _getenv('label', '');
+		my $file = dirname(abs_path $0) . '/.entries';
+		my $obj = new Composer( 
+			title => $title,
+			label => $label,
+			file => $file
+		);
+		MainLoop();
+		$modifier = $obj->{modifier};
 	}
 );
-exec $command if $command;
-
-exit
+sub perform {
+	exec @_;
+}
+sub perform_2 {
+	use IPC::Open3;
+	no warnings 'once';
+	my $command = "@_";
+	$command =~ s/\"/\\"/g;
+	$command = "perl -e 'exec \"$command\"'";
+	my $pid = open3(\*CHLD_IN, \*CHLD_OUT, \*CHLD_ERR, $command) or die "open3() failed $!";
+	while (<CHLD_OUT>) {
+	    print;
+	} 
+}
+if ($command) {
+	given ($modifier) {
+		when ('Alt') {
+			perform terminalize($command)
+		}
+		when ('Control') {
+			my $file = _tempFilename 'outXXXX', "/tmp/out";
+			my $text = _capture_output [\&perform_2, $command], $file;
+			_text $file, $text;
+		}
+		default {
+			perform $command
+		}
+	}
+}
 

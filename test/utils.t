@@ -14,21 +14,31 @@ use lib dirname(dirname abs_path $0);
 
 use Manage::PersistHash;
 
-use Manage::utils qw(
+use Manage::Utils qw(
 	dump pp
 	$_whitespace _has_whitespace _split_on_whitespace _value_or_else 
 	_chomp _combine _flip_hash  _binsearch_numeric
-	_capture_output _check_output _transientFile _file_types
+	_capture_output _check_output _transientFile _file_types 
+	_contents_of_file
+	_tkinit _ask_file
 	_message _now
 );
-use Manage::dollar qw(
+use Manage::Dollar qw(
 	isDollar hasDollar dollar_amount make_Dollar 
 	get_dollars set_dollars detect_dollar 
 	place_given
 	@given %dollars
 );
-use Manage::alias qw(%alias resolve_alias update_expression);
-use Manage::assoc qw(%assoc @assoc_file_types assoc_file_types find_assoc);
+use Manage::Alias qw(
+	resolve_alias 
+	update_alias
+);
+use Manage::Assoc qw(
+	@assoc_file_types 
+	assoc_file_types 
+	find_assoc
+	update_assoc
+);
 
 my $file = "/tmp/test";
 open FILE, ">$file";
@@ -43,14 +53,14 @@ my $words = "IT works";
 sub _say { 
 	say(@_);
 }
-my $tale = _capture_output(\&_say, $words);
+my $tale = _capture_output([\&_say, $words]);
 chomp($tale);
 is($tale, $words);
 sub my_words { 
 	print $words;
 }
 _check_output(\&my_words);
-our ($dollar, $_whitespace);
+our $_whitespace;
 my @parts = split(/$_whitespace/, "", 2);
 is scalar(@parts), 0;
 @parts = split(/$_whitespace/, " ", 2);
@@ -73,12 +83,12 @@ ok hasDollar($_) && !isDollar($_) && dollar_amount($_)==1 for '$1x1';
 ok !hasDollar($_) && !isDollar($_) && !defined(dollar_amount($_)) for '$x11';
 ok hasDollar($_) && !isDollar($_) && dollar_amount($_) eq 'x' for '${x}11';
 ok hasDollar($_) && isDollar($_) && dollar_amount($_) eq 'x11' for '${x11}';
-our %assoc = (
+my %assoc = (
 	".pl" => "perl",
 	".t" => "perl",
 	".html" => "firefox",
 	".xml" => "firefox",
-	".sh" => "bash",
+	"*.sh" => "bash",
 	".java" => "java",
 	"build.xml" => "ant",
 	"makefile" => "make",
@@ -92,6 +102,7 @@ is_deeply \@_, [["All files", '*'], ["No files", '']];
 @_ = _file_types(\%assoc);
 is scalar(@_), 7;
 #dump @_;
+#_ask_file _tkinit(0), 'Test', "$ENV{HOME}/work/bin/devel.sh", \@_;
 @_ = sort(keys %assoc);
 is _value_or_else('', 4, \@_), '.t';
 is _value_or_else('x', 10, \@_), 'x';
@@ -108,6 +119,12 @@ ok -f $file;
 PersistHash::fetch($acca, $file);
 is_deeply $acca->{"assoc"}, \%assoc, "assoc";
 is_deeply $acca->{"cossa"}, \%cossa, "cossa";	#	30
+Manage::Assoc::set_data ( assoc => \%assoc );
+is find_assoc('.xxx'), '';
+update_assoc '.xxx', 'XXX';
+isnt find_assoc('.xxx'), '';
+update_assoc '.xxx';
+is find_assoc('.xxx'), '';
 my @acca = (1,2);
 @_ = _value_or_else(undef, \@acca);
 is_deeply \@_, \@acca;
@@ -155,7 +172,7 @@ is scalar(@assoc_file_types), 6;
 foreach my $type (@assoc_file_types) {
 	is find_assoc($_), @$type[0] foreach @{@$type[1]};
 }
-our %alias = (
+my %alias = (
 	ant   => "bash /home/lotharla/work/bin/ant-or-make.sh \"\$1\"",
 	bash  => "bash \"\$1\"",
 	chmod => {
@@ -163,10 +180,11 @@ our %alias = (
 			   "chmod a-x" => "chmod a-x \"\$1\"",
 			 },
 );
-update_expression("chmod|chmod a+x", $didnt);
+Manage::Alias::set_data ( alias => \%alias );
+update_alias("chmod|chmod a+x", $didnt);
 is resolve_alias("chmod|chmod a+x"), $didnt;
 is keys %alias, 3;
-update_expression("find|find-in-files", $pattern);
+update_alias("find|find-in-files", $pattern);
 is resolve_alias("find|find-in-files"), $pattern;
 is keys %alias, 4;
 use POSIX qw(tzset);

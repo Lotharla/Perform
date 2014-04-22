@@ -1,0 +1,42 @@
+{
+  alias   => {
+               "ant"      => "bash /home/lotharla/work/bin/ant-or-make.sh \"\$1\"",
+               "bash"     => "bash \"\$1\"",
+               "chmod"    => {
+                               "chmod a+x" => "chmod a+x \"\$1\"",
+                               "chmod a-x" => "chmod    a-x \"\$1\"",
+                             },
+               "find"     => {
+                               "find-files"    => "find \"\${1}\" -name \"\${GLOB}\" 2>/dev/null",
+                               "find-in-files" => "find \"\${DIR}\" -name \"\${GLOB}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null",
+                             },
+               "firefox"  => "firefox \"\$1\"",
+               "java"     => "bash /home/lotharla/work/bin/java-compile-and-run.sh \"\$1\"",
+               "make"     => "bash /home/lotharla/work/bin/ant-or-make.sh \"\$1\"",
+               "meld"     => "meld\t\"\$1\"\t\"\$2\"",
+               "perl"     => "perl \"\$1\"",
+               "terminal" => "gnome-terminal -e \"\$1\"",
+               "xdg-open" => "xdg-open \"\$1\"",
+             },
+  assoc   => {
+               ".html"       => "firefox",
+               ".java"       => "java",
+               ".pl"         => "perl",
+               ".sh"         => "bash",
+               ".t"          => "perl",
+               ".xml"        => "firefox",
+               "build.xml"   => "ant",
+               "GNUmakefile" => "make",
+               "Makefile"    => "make",
+               "makefile"    => "make",
+             },
+  history => {
+               "1397838064.47615" => "find \"~/work/perl\" -name \"dress*.*\" 2>/dev/null",
+               "1397839032.69641" => "perl \"/home/lotharla/work/perl/tzset-test.pl\"",
+               "1398119216.02412" => "bash \"/home/lotharla/work/bin/test.sh\"",
+               "1398119476.62787" => "perl \"/home/lotharla/.cpan/build/Tk-804.032-pVR0rJ/t/font.t\"",
+               "1398121349.58922" => "bash \"/home/lotharla/work/bin/run-command.sh\"",
+               "1398121435.56555" => "bash \"/home/lotharla/work/bin/devel.sh\"",
+               "1398125652.51628" => "find \"/home/lotharla/work/perl\" -name \"*.p*\" -print | xargs grep -e \"bless\" 2>/dev/null",
+             },
+}

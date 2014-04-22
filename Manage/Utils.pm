@@ -1,11 +1,15 @@
-package Manage::utils;
+package Manage::Utils;
 
 use strict;
+use warnings;
+no warnings 'experimental';
+use feature qw(say switch);
 use Scalar::Util qw(looks_like_number);
+use File::Basename qw(dirname basename);
 use File::Temp;
 use Data::Dump qw(dump pp);
+use Test::More;
 use Tk;
-use feature qw(say switch);
 
 use Exporter::Easy (
 	OK => [ qw(
@@ -28,12 +32,14 @@ use Exporter::Easy (
 		_persist_hash
 		_iterate_sorted_values
 		_files_in_dir
+		_is_glob
+		_glob_match
 		_make_sure_file
-		_tempFile
 		_contents_to_file
-		_diagnostic
-		_transientFile
 		_contents_of_file
+		_diagnostic
+		_tempFilename
+		_transientFile
 		_capture_output
 		_check_output
 		_binsearch_alpha
@@ -47,11 +53,11 @@ use Exporter::Easy (
 		_tkinit
 		_question
 		_message
+		_text
 		_file_types
 		_ask_file
 		_ask_directory
 		_popup_menu
-		_child_widget_by_name
 	)],
 
 );
@@ -82,6 +88,11 @@ sub _split_on_whitespace {
 	return split(/$_whitespace/, $str, $limit);
 }
 
+sub isBlessed {
+	my $r = shift;
+	ref($r) && UNIVERSAL::can($r,'can')
+}
+
 sub _value_or_else {
 	my $default = shift;
 	my $key = shift;
@@ -95,13 +106,13 @@ sub _value_or_else {
 		}
 		default {
 			given (ref($value)) {
-				when ('HASH') {
-					my %value = %{$value};
-					return exists $value{$key} ? $value{$key} : _value_or_else($default);
-				}
 				when ('ARRAY') {
 					my @value = @{$value};
 					return defined $value[$key] ? $value[$key] : _value_or_else($default);
+				}
+				when ($_ eq 'HASH' || isBlessed($value)) {
+					my %value = %{$value};
+					return exists $value{$key} ? $value{$key} : _value_or_else($default);
 				}
 				default {
 					return $key if $key;
@@ -221,11 +232,26 @@ sub _make_sure_file {
 	return $file;
 }
 
-sub _tempFile {
-	my $template = shift;
-	my $dir = shift;
-	$dir = File::Temp->newdir( CLEANUP => 0 ) if not $dir;
-	return new File::Temp( TEMPLATE => $template, DIR => $dir, UNLINK => 0 );
+sub _is_glob {
+	shift =~ m/\*|\?/
+}
+
+sub _glob_match {
+	my $glob = shift;
+	$glob =~ s/\./\\./g;
+	$glob =~ s/\*/.*/g;
+	$glob =~ s/\?/.?/g;
+	my $str = shift;
+	return $str =~ /$glob/;
+}
+
+sub _contents_of_file {
+	my $file = shift;
+	open my $fh, '<:encoding(UTF-8)', "$file" || die "Can't open file : $!\n";
+	local $/ = undef;	
+	my $contents = <$fh>;
+	close $fh;
+	return $contents;
 }
 
 sub _contents_to_file {
@@ -245,28 +271,42 @@ sub _diagnostic {
 	_contents_to_file $diag, $msg;
 }
 
+sub _tempFilename {
+	my $template = shift;
+	my $dir = shift;
+	$dir = File::Temp->newdir( CLEANUP => 0 ) if not $dir;
+	mkdir $dir unless -d $dir;
+	return new File::Temp( TEMPLATE => $template, DIR => $dir, UNLINK => 0 )->filename;
+}
+
 sub _transientFile {
 #	return "/tmp/test";
 	return new File::Temp( UNLINK => 1 );
 }
 
-sub _contents_of_file {
-	my $file = shift;
-	open my $fh, '<:encoding(UTF-8)', "$file" || die "Can't open file : $!\n";
-	my $contents = <$fh>;
-	close $fh;
-	return $contents;
-}
-
 sub _capture_output {
 	my $func = shift;
-	my $temp = _transientFile;
-	open my $fh, '>:encoding(UTF-8)', "$temp" || die "Can't open file : $!\n";
-	select($fh);
-	$func->(@_);
+	my $name = shift;
+	my $file;
+	if (!$name) {
+		$file = _transientFile;
+		$name = $file->filename;
+	}
+	open $file, '>:encoding(UTF-8)', "$name" || die "Can't open file : $!\n";
+	select($file);
+	given (ref $func) {
+		when ('CODE') {
+			$func->(@_);
+		}
+		when ('ARRAY') {
+			my @array = @$func;
+			$func = shift(@array);
+			$func->(@array);
+		}
+	}
 	select(STDOUT);
-	close $fh;
-	return _contents_of_file($temp);
+	close $file;
+	return _contents_of_file($name);
 }
 
 sub _check_output {
@@ -321,7 +361,7 @@ sub _replace_text {
 	my $partial = _value_or_else(0,2,\@_);
 	if ($en) {
 		if ($partial) {
-			my $index = $en->index('anchor');
+			my $index = $en->index('insert');
 			if ($en->selectionPresent()) {
 				$index = $en->index('sel.first');
 				$en->delete('sel.first', 'sel.last') ;
@@ -381,7 +421,7 @@ sub _tkinit {
 sub _question {
 	use Tk::MsgBox;
 	my $top = shift;
-	return lc($top->MsgBox(-message => shift, -title => shift, -type => "YesNo", -icon => 'question')->Show);
+	return lc($top->MsgBox(-message => shift, -title => shift, -type => "YesNo", -icon => 'question')->Show)
 }
 
 sub _message {
@@ -390,6 +430,16 @@ sub _message {
 	my $result = $top->MsgBox(-message => shift, -title => shift, -type => "ok")->Show;
 	$top->destroy;
 	$result
+}
+
+sub _text {
+	my( $title, $text)= @_;
+	my $top = _tkinit 1, $title;
+	my $txt = $top -> Scrolled("Text", -scrollbars => 'e');
+	$txt->pack(-side => 'left', -fill => 'both', -expand => 1);
+	$txt->insert('end', $text);
+	_center_window $top;
+	MainLoop
 }
 
 sub _file_types {
@@ -420,19 +470,20 @@ sub _file_types {
 sub _ask_file {
 	my $mw = shift;
 	my $title = shift;
-	my $entry = shift;
+	my $file = shift;
 	my @types = _file_types(@_);
 	return $mw->getOpenFile(
 		-title => $title,
-		-initialfile => $entry,
+		-initialdir => dirname($file),
+		-initialfile => basename($file),
 		-filetypes => \@types);
 }
 
 sub _ask_directory {
-	my ($mw,$title,$entry) = @_;
+	my ($mw,$title,$dir) = @_;
 	return $mw->chooseDirectory(
 		-title => $title,
-		-initialdir => $entry);
+		-initialdir => $dir);
 }
 
 sub _popup_menu {
@@ -453,14 +504,6 @@ sub _popup_menu {
 		$menu->unpost;
 	}, Ev('x'), Ev('y')]);
 	$menu
-}
-
-sub _child_widget_by_name {
-	my ($parent,$name) = @_;
-	foreach ($parent->children) {
-		return $_ if $_->name eq $name;
-	}
-	undef
 }
 
 1;

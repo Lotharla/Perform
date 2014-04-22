@@ -1,19 +1,21 @@
 package EntryComposite;
 use strict;
 use warnings;
+no warnings 'experimental';
 use feature qw(say switch);
 use Tk;
 use Tk::BrowseEntry;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path cwd);
 use lib dirname(dirname abs_path $0);
-use Manage::utils qw(
+use Manage::Utils qw(
 	dump pp
 	looks_like_number
 	_value_or_else
 	_indexOf
 	_getenv
 	_now
+	_binsearch_alpha
 	_tkinit
 	_center_window
 	_set_selection
@@ -62,8 +64,10 @@ sub initialize {
 	$self->{widget}->pack(-fill=>'x', -expand=>1);
 	$self->{window}->bind('<KeyPress-Escape>', sub {cancel($self)});
 	$self->{window}->bind('<KeyPress-Return>', sub {$self->commit()});
+	$self->{window}->bind('<Control-KeyPress-Up>', sub {$self->move_entry(-1)});
+	$self->{window}->bind('<Control-KeyPress-Down>', sub {$self->move_entry(+1)});
 	if ($mode > 0) {
-		$self->{window}->bind('<Control-KeyPress-Right>', sub {$self->move_point_in_time(1)});
+		$self->{window}->bind('<Control-KeyPress-Right>', sub {$self->move_point_in_time(+1)});
 		$self->{window}->bind('<Control-KeyPress-Left>', sub {$self->move_point_in_time(-1)});
 		$self->{popup} = _popup_menu($self->{window}, 
 			sub {
@@ -79,6 +83,9 @@ sub initialize {
 		) if $mode > 1;
 	}
 	_center_window($self->{window});
+	$self->{entry}->configure(
+		-font => $self->{window}->fontCreate(-size => 12)
+	);
 	_set_selection($self->{entry});
 }
 sub file { $_[0]->{file}=$_[1] if defined $_[1]; $_[0]->{file} }
@@ -141,6 +148,16 @@ sub selected {
 	my $i = pop($self->{listbox}->curselection);
 	my @items = $self->{items}->();
 	$items[$i];
+}
+sub move_entry {
+    my $self = shift;
+	my $direct = shift;
+	my @items = $self->{items}->();
+    my $ptr = _indexOf(_value_or_else('', $self->item), \@items);
+	$ptr += $direct;
+    $ptr++ if $ptr < -1;
+	$ptr %= scalar(@items);
+	$self->item($items[$ptr]);
 }
 sub timeline {
     my $self = shift;
@@ -208,7 +225,12 @@ sub change_history {
 			}
 		}
 		when ('add') {
-			$self->history(_now(), $self->item);
+			my $item = _value_or_else $self->item, $confirm;
+			if ($confirm) {
+				my $point = $self->get_point_in_time($confirm);
+			    $self->history($point, '') if $point > 0;
+			}
+			$self->history(_now(), $item);
 		}
 		default {
 			$self->set_point_in_time($self->selected);
@@ -216,13 +238,18 @@ sub change_history {
 		}
 	}
 }
+sub historize {
+	my $self = shift;
+	my $item = shift;
+	if ($self->mode > 1 && $item) {
+	    $self->change_history('add', $item);
+	}
+}
 sub commit {
 	my $self = shift;
-	my $item = $self->item;
-	if ($self->mode > 1) {
-	    $self->change_history('add') if $self->new_entry($item);
-	}
-	print $item;
+	$self->historize($self->item);
+	my $output = _value_or_else '', $self->item;
+	print $output;
 	$self->cancel
 }
 sub finalize {
@@ -237,7 +264,6 @@ given (_value_or_else(0, _getenv('test'))) {
 	when ($_ > 1) {
 		my $file = dirname(dirname abs_path $0) . '/.entries';
 		my $ec = new EntryComposite('file', $file, 'label', '<<--History-->>');
-		$ec->give(cwd());
 		MainLoop();
 	}
 	when ($_ > 0) {
