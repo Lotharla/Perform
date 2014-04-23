@@ -17,6 +17,7 @@ use Manage::Utils qw(
 	_fileparse
 	_files_in_dir
 	_contents_of_file
+	_contents_to_file
 	_center_window
 );
 use Manage::Composite;
@@ -41,10 +42,19 @@ sub populate {
 		foreach my $file (@params) {
 			my(@parts) = _fileparse($file);
 			my $tab = $self->{book}->add( $file, -label=>$parts[0].$parts[2], -raisecmd=>sub{} );
-			my $txt = $tab->Scrolled("Text", -scrollbars => 'osoe');
-			$txt->pack(-fill => 'both', -expand => 1);
+			my $widget = $tab->Scrolled("Text", -background => '#fffafa', -scrollbars => 'osoe');
+			my $text_widget = $widget->Subwidget('scrolled');
+			my $menu = $text_widget->menu;
+			$menu->separator;
+			$menu->add('command', 
+				-label => 'Save', 
+				-command => sub { 
+					_contents_to_file $file, $text_widget->Contents; 
+				}
+			);
+			$widget->pack(-fill => 'both', -expand => 1);
 			my $text = _contents_of_file $file;
-			$txt->insert('end', $text);
+			$widget->insert('end', $text);
 		}
 	}
 }

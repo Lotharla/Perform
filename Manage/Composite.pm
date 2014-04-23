@@ -57,4 +57,4 @@ sub cancel {
 	$self->finalize;
 	$self->{window}->destroy();
 }
-1
+1;

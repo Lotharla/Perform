@@ -18,10 +18,9 @@ use Manage::Utils qw(
 	_diagnostic
 	_tkinit
 	_center_window
-	_text
+	_text_info
 );
 use Manage::Composer;
-use Manage::ViewComposite;
 my $terminal = `gconftool-2 -g /desktop/gnome/applications/terminal/exec`;
 $terminal = _chomp($terminal);
 sub terminalize {
@@ -70,9 +69,8 @@ if ($command) {
 		when ('Control') {
 			my $dir = "/tmp/out";
 			my $file = _tempFilename 'outXXXX', $dir;
-			_capture_output [\&perform_2, $command], $file;
-			new ViewComposite('title', $command, 'params', [$file]);
-			MainLoop();
+			my $text = _capture_output [\&perform_2, $command], $file;
+			_text_info $command, $text;
 		}
 		default {
 			perform $command

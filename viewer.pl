@@ -16,7 +16,7 @@ use Manage::Utils qw(
 use Manage::ViewComposite;
 my @params = @ARGV ? @ARGV : _getenv('NAUTILUS_SCRIPT_SELECTED_FILE_PATHS');
 my $ec = new ViewComposite(
-	title => _getenv('title'), 
+	title => _getenv('title', "View files ..."), 
 	width => _getenv('width'),
 	params => \@params
 );

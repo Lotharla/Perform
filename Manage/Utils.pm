@@ -54,7 +54,7 @@ use Exporter::Easy (
 		_tkinit
 		_question
 		_message
-		_text
+		_text_info
 		_file_types
 		_ask_file
 		_ask_directory
@@ -444,10 +444,10 @@ sub _message {
 	$result
 }
 
-sub _text {
+sub _text_info {
 	my( $title, $text)= @_;
 	my $top = _tkinit 1, $title;
-	my $txt = $top->Scrolled("Text", -scrollbars => 'e');
+	my $txt = $top->Scrolled("ROText", -scrollbars => 'e');
 	$txt->pack(-side => 'left', -fill => 'both', -expand => 1);
 	$txt->insert('end', $text);
 	_center_window $top;
