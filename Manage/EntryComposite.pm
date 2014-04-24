@@ -54,6 +54,7 @@ sub initialize {
 		$self->{listbox}->bind('<<ListboxSelect>>' => sub{ $self->change_history }) if $mode > 1;
 	}
 	$self->{widget}->pack(-fill=>'x', -expand=>1);
+	$self->{window}->bind('<KeyPress-Return>', sub {$self->commit()});
 	$self->{window}->bind('<Control-KeyPress-Up>', sub {$self->move_entry(-1)});
 	$self->{window}->bind('<Control-KeyPress-Down>', sub {$self->move_entry(+1)});
 	if ($mode > 0) {
@@ -72,11 +73,26 @@ sub initialize {
 			'update', sub{ $self->change_history('update') }
 		) if $mode > 1;
 	}
-	_center_window($self->{window});
+	$self->bottom;
 	$self->{entry}->configure(
 		-font => $self->{window}->fontCreate(-size => 12)
 	);
+	_center_window($self->{window});
 	_set_selection($self->{entry});
+}
+sub bottom {
+	my $self = shift;
+	my $bottom = $self->{window}->Frame->pack(-side => 'bottom');
+	my %buttons = (
+		ok => $bottom->
+			Button(-text => 'OK', -command => sub { $self->commit })->
+				pack(-side => "left", -expand=>1),
+		cancel => $bottom->
+			Button(-text => 'Cancel', -command => sub { $self->cancel })->
+				pack(-side => "left", -expand=>1),
+	);
+	$self->{window}->bind('<Alt-Return>', sub { $self->{modifier} = 'Alt'; $buttons{'ok'}->invoke });
+	$self->{window}->bind('<Control-Return>', sub { $self->{modifier} = 'Control'; $buttons{'ok'}->invoke });
 }
 sub item { $_[0]->{item}=$_[1] if defined $_[1]; $_[0]->{item} }
 sub give {
@@ -249,7 +265,7 @@ given (_value_or_else(0, _getenv('test'))) {
 	}
 	when ($_ > 0) {
 		my @paths = sort split( /:/, $ENV{PATH});
-		my $ec = new EntryComposite('label', 'Path', 'params', \@paths);
+		my $ec = new EntryComposite('title', 'Environment', 'label', 'Path', 'params', \@paths);
 		$ec->give(cwd());
 		MainLoop();
 	}

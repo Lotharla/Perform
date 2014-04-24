@@ -15,7 +15,7 @@ use Manage::Utils qw(
 	_getenv
 	_set_selection
 );
-use Manage::Dollar qw(
+use Manage::Given qw(
 	hasDollar
 	place_given
 	@given 
@@ -40,9 +40,9 @@ sub new {
 sub initialize {
     my( $self ) = @_;
     $self->SUPER::initialize();
-	my @menus;
 	if ($self->mode > 1) {
 		$self->{window}->configure(-menu => my $menu = $self->{window}->Menu());
+		my @menus;
 		push @menus, install_menu_button($menu, 'Alias', sub { 
 			my $value = shift; 
 			$self->item($value) if $value;
@@ -61,21 +61,13 @@ sub initialize {
 				$submenu->entryconfigure(1, -state => $possible ? 'normal' : 'disabled');
 			}
 		)->cget('-menu');
-		$submenu->command(-label=>'Dollar', -command => sub{$self->prepare_output});
 		$submenu->command(-label=>'Place given', -command => sub{
 			$self->item(place_given($self->item));
 			_set_selection($self->{entry});
 		});
+		$submenu->command(-label=>"Replace '\$...'", -command => sub{$self->prepare_output});
 		push @menus, $submenu;
 	}
-	my $bottom = $self->{window}->Frame->pack(-side => 'bottom');
-	my %buttons;
-	$buttons{'ok'} = $bottom->Button(-text => 'OK',
-	            	-command => sub { $self->commit })->pack(-side => "left", -expand=>1);
-	$buttons{'cancel'} = $bottom->Button(-text => 'Cancel',
-	            	-command => sub { $self->cancel })->pack(-side => "left", -expand=>1);
-	$self->{window}->bind('<Alt-Return>', sub { $self->{modifier} = 'Alt'; $buttons{'ok'}->invoke });
-	$self->{window}->bind('<Control-Return>', sub { $self->{modifier} = 'Control'; $buttons{'ok'}->invoke });
 }
 sub data {
 	my $self = shift;
@@ -95,7 +87,7 @@ sub populate {
 	if ($mode > 1) {
 		Manage::Alias::inject($self);
 		Manage::Assoc::inject($self);
-		Manage::Dollar::inject($self);
+		Manage::Given::inject($self);
 	}
 	@given = _getenv('given');
 	$self->pre_select($given[0]);

@@ -37,7 +37,7 @@ sub initialize {
 sub populate {
 	my $self = shift;
     my $mode = shift;
-    if ($mode == 1) {
+    if ($mode == 1 && $self->{params}) {
 		my @params = @{$self->{params}};
 		foreach my $file (@params) {
 			my(@parts) = _fileparse($file);

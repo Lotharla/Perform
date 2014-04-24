@@ -1,4 +1,4 @@
-package Manage::Dollar;
+package Manage::Given;
 use strict;
 use warnings;
 no warnings 'experimental';
@@ -13,7 +13,8 @@ use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(dirname abs_path $0);
 use Manage::Utils qw(
-	dump 
+	dump pp
+	_combine
 	_getenv 
 	_value_or_else 
 	_tkinit 
@@ -25,6 +26,7 @@ use Manage::Utils qw(
 use Exporter::Easy (
 	OK => [ qw(
 		@given
+		given_title
 		append_given
 		%dollars
 		hasDollar
@@ -38,18 +40,19 @@ use Exporter::Easy (
 		what_is_dollar
 	)],
 );
-my ($obj, $window, $width);
-sub inject {
-	$obj = shift;
-	$width = _value_or_else(75, 'width', $obj);
-	$window = $obj->{window};
+our @given = _getenv('given', sub{()});
+sub given_title {
+	my $title = shift;
+	$title = _getenv('title', $title);
+	if (@given) {
+		$title .= " on " . ($#given > 0 ? scalar(@given) . " files" : "'$given[0]'");
+	}
+	$title
 }
-our @given = _getenv('given');
-my $append_given = 1;
 sub append_given {
 	my $output = shift;
-	if ($given[0] and $append_given ) {
-		return &combine( $output, $given[0] );
+	if (@given) {
+		return _combine( $output, @given );
 	}
 	$output
 }
@@ -120,6 +123,12 @@ sub place_given {
 	}
 	set_dollars($input)
 }
+my ($obj, $window, $width);
+sub inject {
+	$obj = shift;
+	$width = _value_or_else(75, 'width', $obj);
+	$window = $obj->{window};
+}
 sub what_is_dollar {
 	my $input = shift;
 	my $types = shift;
@@ -177,19 +186,6 @@ sub what_is_dollar {
 			-text => 'directories',
 			-value => 'd',
 			-variable => \$choice)->grid(-row => 1, -column => 3);
-	}
-	if ($given[0] && !$given[0]) {
-		my $en;
-		my $tab = $book->add( 'finally', -label=>'finally', -raisecmd=>sub{_set_selection($en)} );
-		$tab->Checkbutton(
-			-text => 'append given document',
-			-onvalue => 1, -offvalue => 0,
-			-command => sub { $en->configure(-state => ($append_given ? 'normal' : 'disabled')) },
-		  	-variable => \$append_given)->grid(-row => 0, -column => 0);
-		$en = $tab->Entry(
-			-width => $width,
-			-state => 'normal',
-			-textvariable => \$given[0])->grid(-row => 1, -column => 0);
 	}
 	my $answer = $dlg->Show();
 	if ($answer and $answer eq "OK") {

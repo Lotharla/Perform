@@ -23,20 +23,20 @@ sub new {
 	$self->initialize;
 	return $self;
 }
-sub mode {
-	my $self = shift;
-	return exists $self->{params} ? 1 : 
-		($self->file() && -f $self->file() ? 2 : 0);
-}
 sub initialize {
 	my $self = shift;
 	my $title = _value_or_else('', $self->{title});
 	$self->{window} = _value_or_else(sub{_tkinit(0, $title)}, $self->{window});
 	$self->{width} = _value_or_else(50, $self->{width});
 	$self->{window}->bind('<KeyPress-Escape>', sub {cancel($self)});
-	$self->{window}->bind('<KeyPress-Return>', sub {$self->commit()});
 }
 sub file { $_[0]->{file}=$_[1] if defined $_[1]; $_[0]->{file} }
+sub mode {
+	my $self = shift;
+	my $file = $self->file;
+	return exists $self->{params} ? 1 : 
+		($file && -f $file ? 2 : 0);
+}
 sub data {
 	my $self = shift;
 	tie my %data, "PersistHash", $self->file;

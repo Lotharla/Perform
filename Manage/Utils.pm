@@ -18,10 +18,13 @@ use Exporter::Easy (
 		@_separator
 		$_whitespace
 		_combine
+		_flatten
+		_escapeDoubleQuotes
 		_said
 		_chomp
 		_has_whitespace
 		_split_on_whitespace
+		_isBlessed
 		_value_or_else
 		_getenv
 		_now
@@ -32,6 +35,7 @@ use Exporter::Easy (
 		_persist_hash
 		_iterate_sorted_values
 		_fileparse
+		_pathcombine
 		_files_in_dir
 		_is_glob
 		_glob_match
@@ -69,6 +73,18 @@ sub _combine {
 	join ($_separator[0], @_);
 }
 
+sub _flatten {
+	my $string = shift;
+	$string =~ s/$_/ /g foreach @_separator;
+	$string
+}
+
+sub _escapeDoubleQuotes {
+	my $string = shift;
+	$string =~ s/\"/\\"/g;
+	$string
+}
+
 sub _said { _combine(@_) . $_separator[1] }
 
 sub _chomp {
@@ -89,7 +105,7 @@ sub _split_on_whitespace {
 	return split(/$_whitespace/, $str, $limit);
 }
 
-sub isBlessed {
+sub _isBlessed {
 	my $r = shift;
 	ref($r) && UNIVERSAL::can($r,'can')
 }
@@ -111,7 +127,7 @@ sub _value_or_else {
 					my @value = @{$value};
 					return defined $value[$key] ? $value[$key] : _value_or_else($default);
 				}
-				when ($_ eq 'HASH' || isBlessed($value)) {
+				when ($_ eq 'HASH' || _isBlessed($value)) {
 					my %value = %{$value};
 					return exists $value{$key} ? $value{$key} : _value_or_else($default);
 				}
@@ -129,18 +145,18 @@ sub _value_or_else {
 }
 
 sub _getenv {
-	my $default = _value_or_else('', 1, \@_);
-	if (exists $ENV{$_[0]}) {
-		my $value = $ENV{$_[0]};
-		if (looks_like_number($default) && !looks_like_number($value)) {
-			$value = $default;
-		}
-		my @values = split(/$_separator[1]/, $value);
-		return @values if scalar(@values) > 1;
-		$values[0]
-	} else {
-		$default
+	my $value = _value_or_else '', $_[0], \%ENV;
+	my $default = _value_or_else '', 1, \@_;
+	if (not $value) {
+		return $default->() if ref($default) eq 'CODE';
+		return $default;
 	}
+	if (looks_like_number($default) && !looks_like_number($value)) {
+		return $default;
+	}
+	my @values = split(/$_separator[1]/, $value);
+	return @values if scalar(@values) > 1;
+	$values[0]
 }
 
 sub _now {
@@ -219,15 +235,19 @@ sub _fileparse {
 	fileparse(shift, qr/\.[^.]*/);
 }
 
+sub _pathcombine {
+	use File::Spec::Functions qw(catfile);
+	catfile @_
+}
+
 sub _files_in_dir {
 	my $dir = shift;
 	my $full = shift;
 	opendir(DIR, $dir) || die "Can't open directory : $!\n";
 	my @list = grep !/^\.\.?$/, readdir(DIR);
 	if ($full) {
-		use File::Spec::Functions qw(catfile);
 		for (my $i = 0; $i < scalar(@list); $i++) {
-			$list[$i] = catfile($dir, $list[$i]);
+			$list[$i] = _pathcombine($dir, $list[$i]);
 		}
 	}
 	closedir(DIR);
