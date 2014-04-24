@@ -11,6 +11,8 @@ use Manage::Utils qw(
 	dump 
 	_chomp
 	_combine
+	_flatten
+	_escapeDoubleQuotes
 	_getenv 
 	_value_or_else 
 	_tempFilename
@@ -20,22 +22,15 @@ use Manage::Utils qw(
 	_center_window
 	_text_info
 );
+use Manage::Given qw(
+	@given
+	given_title
+);
 use Manage::Composer;
-my $terminal = `gconftool-2 -g /desktop/gnome/applications/terminal/exec`;
-$terminal = _chomp($terminal);
-sub terminalize {
-	my $title = $_[0];
-	$title =~ s/\"//g;
-	my $output = $_[0];
-	$output =~ s/\t/ /g;
-	$output =~ s/\"/\\"/g;
-	$output = "bash -c '" . $output . " | less'";
-	return _combine( "$terminal", "-t", sprintf("\"%s\"", $title), "-e", "\"$output\"" );
-}
 my $modifier;
 my $command = _capture_output(
 	sub {
-		my $title = _getenv('title', "Perform ...");
+		my $title = given_title("Perform ...");
 		my $label = _getenv('label', '');
 		my $file = dirname(abs_path $0) . '/.entries';
 		my $obj = new Composer( 
@@ -47,15 +42,23 @@ my $command = _capture_output(
 		$modifier = $obj->{modifier};
 	}
 );
+my $terminal = _chomp(`gconftool-2 -g /desktop/gnome/applications/terminal/exec`);
+sub terminalize {
+	my $output = _flatten $_[0];
+	$output = _escapeDoubleQuotes $output;
+	$output = "bash -c '" . $output . " | less'";
+	return _combine( "$terminal", "-t", sprintf("\"%s\"", $output), "-e", "\"$output\"" );
+}
 sub perform {
+	_diagnostic "@_";
 	exec @_;
 }
 sub perform_2 {
 	use IPC::Open3;
 	no warnings 'once';
-	my $command = "@_";
-	$command =~ s/\"/\\"/g;
+	my $command = _escapeDoubleQuotes "@_";
 	$command = "perl -e 'exec \"$command\"'";
+	_diagnostic $command;
 	my $pid = open3(\*CHLD_IN, \*CHLD_OUT, \*CHLD_ERR, $command) or die "open3() failed $!";
 	while (<CHLD_OUT>) {
 	    print;

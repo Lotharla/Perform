@@ -13,11 +13,14 @@ use Manage::Utils qw(
 	_getenv 
 	_value_or_else 
 );
+use Manage::Given qw(
+	@given
+	given_title
+);
 use Manage::ViewComposite;
-my @params = @ARGV ? @ARGV : _getenv('NAUTILUS_SCRIPT_SELECTED_FILE_PATHS');
 my $ec = new ViewComposite(
-	title => _getenv('title', "View files ..."), 
+	title => given_title("View files ..."), 
 	width => _getenv('width'),
-	params => \@params
+	params => \@given
 );
 MainLoop();

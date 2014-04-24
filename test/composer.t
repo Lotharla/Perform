@@ -18,7 +18,7 @@ use Manage::Utils qw(
 	_make_sure_file
 	_check_output
 );
-use Manage::Dollar qw(
+use Manage::Given qw(
 	isDollar hasDollar dollar_amount make_Dollar 
 	get_dollars set_dollars detect_dollar 
 	place_given

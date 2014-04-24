@@ -16,18 +16,24 @@ use Manage::PersistHash;
 
 use Manage::Utils qw(
 	dump pp
-	$_whitespace _has_whitespace _split_on_whitespace _value_or_else 
-	_chomp _combine _flip_hash  _binsearch_numeric
-	_capture_output _check_output _transientFile _file_types 
+	$_whitespace _has_whitespace _split_on_whitespace 
+	_value_or_else _getenv
+	_chomp _combine _flatten
+	_flip_hash 
+	_binsearch_numeric
+	_capture_output _check_output 
+	_transientFile _file_types 
 	_contents_of_file
 	_tkinit _ask_file
 	_message _now
 );
-use Manage::Dollar qw(
+use Manage::Given qw(
 	isDollar hasDollar dollar_amount make_Dollar 
 	get_dollars set_dollars detect_dollar 
+	%dollars
+	@given 
+	given_title
 	place_given
-	@given %dollars
 );
 use Manage::Alias qw(
 	resolve_alias 
@@ -76,9 +82,10 @@ my $didnt = "I didn't do it";
 @parts = _split_on_whitespace($didnt, 0);
 is scalar(@parts), 4;
 my %samples = ( 11 => "\$11", '1_1' => "\${1_1}", "D'oh" => "\${D'oh}", $didnt => "\${$didnt}", );
-is make_Dollar($_), $samples{$_}, $_ foreach keys %samples;
-foreach (values %samples) { ok(hasDollar($_) && isDollar($_), $_) 
-	if !_has_whitespace($_) and index($_, "'") < 0 };
+is make_Dollar($_), $samples{$_}, '_'.$_.'_' foreach keys %samples;
+foreach (values %samples) { 
+	ok(hasDollar($_) && isDollar($_), $_) if !_has_whitespace($_) and index($_, "'") < 0 
+};
 ok hasDollar($_) && !isDollar($_) && dollar_amount($_)==1 for '$1x1';
 ok !hasDollar($_) && !isDollar($_) && !defined(dollar_amount($_)) for '$x11';
 ok hasDollar($_) && !isDollar($_) && dollar_amount($_) eq 'x' for '${x}11';
@@ -223,6 +230,16 @@ $data{'history'}->{$now} = 'bla';
 ok exists($data{'history'}->{$now});
 my %data2 = $closure->();
 is $data2{'history'}->{$now}, 'bla';
+is _flatten("1\n2\t3"), "1 2 3";
+is _combine('1',(2,3)), "1\t2\t3";
+@given = _getenv 'given', "xxx";
+is given_title('title'), "title on 'xxx'";
+$ENV{'given'} = "xxx\nzzz";
+@given = _getenv 'given';
+is given_title('title'), "title on 2 files";
+delete $ENV{'given'};
+@given = _getenv('given', sub{()});
+is scalar(@given), 0;
 =pod
 =cut
 exit;
