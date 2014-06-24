@@ -14,7 +14,7 @@ use Manage::Utils qw(
 	_value_or_else 
 	_getenv
 	_contains
-	_rndStr
+	_rndstr
 	_make_sure_file
 	_check_output
 );
@@ -36,7 +36,7 @@ use Manage::Composer;
 given (_value_or_else(0, _getenv('testing'))) {
 	when ($_ != 0) {
 		my $glob = '*.xxx';
-		my $alias = _rndStr 8, 'a'..'z', 0..9;
+		my $alias = _rndstr 8, 'a'..'z', 0..9;
 		my $ntd = _combine('nothing to do', "\$1");
 		my $str = reverse $alias;
 		my $file = '/tmp/.entries';

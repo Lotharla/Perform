@@ -3,29 +3,41 @@ use warnings;    # this warns you of bad practices
 use strict;      # this prevents silly errors
 use feature qw(say switch);
 use Test::More qw( no_plan ); # for the is() and isnt() functions
-
 BEGIN { 
 	$| = 1;	#	autoflush on
 }
-
 use File::Basename qw(dirname);
 use Cwd qw(abs_path cwd);
 use lib dirname(dirname abs_path $0);
-
 use Manage::PersistHash;
-
 use Manage::Utils qw(
 	dump pp
-	$_whitespace _has_whitespace _split_on_whitespace 
-	_value_or_else _getenv
-	_chomp _combine _flatten
+	$_whitespace 
+	_has_whitespace 
+	_split_on_whitespace 
+	_value_or_else 
+	_getenv
+	_chomp 
+	_combine 
+	_flatten
 	_flip_hash 
 	_binsearch_numeric
-	_capture_output _check_output 
-	_transientFile _file_types 
+	_capture_output 
+	_check_output 
+	_file_exists
+	_dir_exists
+	_transientFile 
+	_file_types 
 	_contents_of_file
-	_tkinit _ask_file
-	_message _now
+	_tkinit 
+	_ask_file
+	_message 
+	_now
+	_extract_from
+	_object_from_XML
+	_string_contains
+	_rndstr
+	_index_of
 );
 use Manage::Given qw(
 	isDollar hasDollar dollar_amount make_Dollar 
@@ -45,7 +57,6 @@ use Manage::Assoc qw(
 	find_assoc
 	update_assoc
 );
-
 my $file = "/tmp/test";
 open FILE, ">$file";
 select FILE; # print will use FILE instead of STDOUT
@@ -232,14 +243,50 @@ my %data2 = $closure->();
 is $data2{'history'}->{$now}, 'bla';
 is _flatten("1\n2\t3"), "1 2 3";
 is _combine('1',(2,3)), "1\t2\t3";
-@given = _getenv 'given', "xxx";
-is given_title('title'), "title on 'xxx'";
+$ENV{'given'} = "xxx";
+@given = _getenv 'given';
+ok _string_contains given_title('title'), "on 'xxx'", -1;
 $ENV{'given'} = "xxx\nzzz";
 @given = _getenv 'given';
-is given_title('title'), "title on 2 files";
+ok _string_contains given_title('title'), "on 2 files", -1;
 delete $ENV{'given'};
 @given = _getenv('given', sub{()});
 is scalar(@given), 0;
+my $dir = dirname(dirname abs_path $0);
+ok _dir_exists($dir);
+$_ = scalar(@_ = _extract_from(dirname(dirname abs_path $0) . "/Manage/Utils.pm", "sub\\s+(\\w+)"));
+is $_ / $_, 1;
+$file = dirname($dir) . "/bin/devel.sh";
+ok _file_exists($file);
+say _extract_from $file, "\\v(\\w+)\\)\\v", " ";
+$file = "/home/lotharla/work/Niklas/androidStuff/BerichtsheftApp/build.xml";
+ok _file_exists($file);
+my $obj = _object_from_XML($file);
+isnt $obj->{project}, undef;
+#dump $obj;
+$file = $obj->{project}->{import}->{"\@file"};
+isnt $file, undef, $file;
+my @matches;
+while ($file =~ /\$\{([^\}]+)\}/g) {
+	my @minus = @-;
+	my @plus = @+;
+	push @matches, [ \@minus, \@plus ];
+}
+#dump \@matches;
+for my $match (@matches) {
+	my $name = substr($file,$match->[0]->[1],$match->[1]->[1]-$match->[0]->[1]);
+	for my $prop (@{$obj->{project}->{property}}) {
+		if ($prop->{"\@name"} && $prop->{"\@name"} eq $name) {
+			my $value = $prop->{"\@value"};
+			substr($file,$match->[0]->[0],$match->[1]->[0]-$match->[0]->[0],$value);
+		}
+	}
+}
+ok $file !~ /\$\{([^\}]+)\}/, $file;
+@_ = ('a'..'z', 0..9);
+$_ = _rndstr 8, @_;
+is length $_, 8;
+ok _index_of($_, @_) > -1 for split '', $_;
 =pod
 =cut
 exit;

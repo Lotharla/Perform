@@ -1,4 +1,4 @@
-#!/usr/local/bin/perl
+#!/usr/bin/env perl
 use strict;
 use warnings;
 no warnings 'experimental';
@@ -36,7 +36,13 @@ my $command = _capture_output(
 		my $obj = new Composer( 
 			title => $title,
 			label => $label,
-			file => $file
+			file => $file,
+			initMenu => sub {
+				my ($self, $menu) = @_;
+				my $submenu = $menu->cascade(-label=>'Run', -underline=>0, -tearoff => 'no')->cget('-menu');
+				$submenu->radiobutton(-label=>"in Terminal", -command => sub{ $self->{modifier} = 'Alt' });
+				$submenu->radiobutton(-label=>"and capture output", -command => sub{ $self->{modifier} = 'Control' });
+			}
 		);
 		MainLoop();
 		$modifier = $obj->{modifier};

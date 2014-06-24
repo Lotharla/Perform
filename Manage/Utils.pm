@@ -5,9 +5,11 @@ use warnings;
 no warnings 'experimental';
 use feature qw(say switch);
 use Scalar::Util qw(looks_like_number);
+use Cwd qw(abs_path);
 use File::Basename qw(dirname basename fileparse);
 use File::Temp;
 use Data::Dump qw(dump pp);
+use XML::XML2JSON;
 use Test::More;
 use Tk;
 
@@ -15,6 +17,8 @@ use Exporter::Easy (
 	OK => [ qw(
 		dump pp
 		looks_like_number
+		_max
+		_min
 		@_separator
 		$_whitespace
 		_combine
@@ -22,26 +26,40 @@ use Exporter::Easy (
 		_escapeDoubleQuotes
 		_said
 		_chomp
+		_surround
 		_has_whitespace
 		_split_on_whitespace
-		_isBlessed
+		_blessed
+		_array
+		_hash
 		_value_or_else
 		_getenv
 		_now
-		_rndStr
+		_rndstr
 		_indexOf
+		_index_of
 		_contains
+		_duplicates
+		_string_contains
+		_detect
+		_interpolate
+		_interpolate_rex
+		_subst_rex
 		_flip_hash
-		_persist_hash
+		_persist
+		_implicit
 		_iterate_sorted_values
 		_fileparse
 		_pathcombine
 		_files_in_dir
 		_is_glob
 		_glob_match
+		_dir_exists
+		_file_exists
 		_make_sure_file
 		_contents_to_file
 		_contents_of_file
+		_extract_from
 		_diagnostic
 		_tempFilename
 		_transientFile
@@ -49,6 +67,7 @@ use Exporter::Easy (
 		_check_output
 		_binsearch_alpha
 		_binsearch_numeric
+		_object_from_XML
 		_set_selection
 		_replace_text
 		_center_window
@@ -56,6 +75,7 @@ use Exporter::Easy (
 		_key_event
 		_key_event_check
 		_tkinit
+		_choose_font
 		_question
 		_message
 		_text_info
@@ -63,15 +83,22 @@ use Exporter::Easy (
 		_ask_file
 		_ask_directory
 		_popup_menu
+		_win32
 	)],
-
 );
+sub _max ($$) { $_[$_[0] < $_[1]] }
+sub _min ($$) { $_[$_[0] > $_[1]] }
+
+sub _win32 {
+	$^O eq 'MSWin32'
+}
 
 our @_separator = ("\t", "\n");
 
 sub _combine {
-	join ($_separator[0], @_);
+	join $_separator[0], @_;
 }
+sub _said { _combine(@_) . $_separator[1] }
 
 sub _flatten {
 	my $string = shift;
@@ -85,12 +112,24 @@ sub _escapeDoubleQuotes {
 	$string
 }
 
-sub _said { _combine(@_) . $_separator[1] }
-
 sub _chomp {
 	my $var = shift;
-	chomp $var;
+	chomp $var if $var;
 	return $var
+}
+
+sub _surround {
+	my $surrounder = shift;
+	my ($start,$end) = ('','');
+	given ($surrounder) {
+		when (1) { ($start,$end) = ('\'','\''); }
+		when (2) { ($start,$end) = ('"','"'); }
+		when (3) { ($start,$end) = ('(',')'); }
+		when (4) { ($start,$end) = ('[',']'); }
+		when (5) { ($start,$end) = ('{','}'); }
+		default { ($start,$end) = _value_or_else(sub{($start,$end)}, $surrounder); }
+	}
+	$start . $_[0] . $end
 }
 
 our $_whitespace = qr/[ \t\n]+/;
@@ -102,13 +141,13 @@ sub _has_whitespace {
 sub _split_on_whitespace {
 	my $str = shift;
 	my $limit = scalar(@_) > 0 ? shift : 2;
-	return split(/$_whitespace/, $str, $limit);
+	split(/$_whitespace/, $str, $limit)
 }
 
-sub _isBlessed {
-	my $r = shift;
-	ref($r) && UNIVERSAL::can($r,'can')
-}
+sub _array { ref($_[0]) eq 'ARRAY' ? @{$_[0]} : () }
+sub _hash { ref($_[0]) eq 'HASH' ? %{$_[0]} : () }
+
+sub _blessed { ref($_[0]) && UNIVERSAL::can($_[0],'can') }
 
 sub _value_or_else {
 	my $default = shift;
@@ -127,7 +166,7 @@ sub _value_or_else {
 					my @value = @{$value};
 					return defined $value[$key] ? $value[$key] : _value_or_else($default);
 				}
-				when ($_ eq 'HASH' || _isBlessed($value)) {
+				when ($_ eq 'HASH' || _blessed($value)) {
 					my %value = %{$value};
 					return exists $value{$key} ? $value{$key} : _value_or_else($default);
 				}
@@ -145,7 +184,8 @@ sub _value_or_else {
 }
 
 sub _getenv {
-	my $value = _value_or_else '', $_[0], \%ENV;
+	my $key = _win32() ? uc($_[0]) : $_[0];
+	my $value = _value_or_else '', $key, \%ENV;
 	my $default = _value_or_else '', 1, \@_;
 	if (not $value) {
 		return $default->() if ref($default) eq 'CODE';
@@ -155,8 +195,7 @@ sub _getenv {
 		return $default;
 	}
 	my @values = split(/$_separator[1]/, $value);
-	return @values if scalar(@values) > 1;
-	$values[0]
+	return scalar(@values) > 1 ? @values : $values[0];
 }
 
 sub _now {
@@ -164,8 +203,8 @@ sub _now {
 	return Time::HiRes::time()
 }
 
-sub _rndStr{ 
-	join'', @_[ map{ rand @_ } 1 .. shift ]
+sub _rndstr { 
+	join '', @_[ map { rand @_ } 1 .. shift ]
 }
 
 sub _indexOf {
@@ -176,11 +215,108 @@ sub _indexOf {
 	return $i > $#array ? -1 : $i;
 }
 
+sub _index_of {
+	my $value = shift;
+	my @array = @_;
+	my $i = 0;
+	++$i until $i > $#array or $array[$i] eq $value;
+	return $i > $#array ? -1 : $i;
+}
+
 sub _contains {
 	my @array = @{$_[0]};
 	my $value = $_[1];
 	my %hash = map { $_ => 1 } @array;
 	return exists $hash{$value};
+}
+
+sub _duplicates {
+	my @array = @_;
+	return () if ! @array;
+	my %hash = map { $_ => 1 } @array;
+	my @keys = keys %hash;
+	foreach (@keys) {
+		my $i = _index_of($_, @array);
+		splice @array, $i, 1
+	}
+	@array
+}
+
+sub _string_contains {
+	my ($haystack,$needle,$pos) = @_;
+	given ($pos) {
+		when (0) {
+			return $haystack =~ /^\Q$needle\E/ ? 1 : 0;
+		}
+		when (-1) {
+			return $haystack =~ /\Q$needle\E$/ ? 1 : 0;
+		}
+		default {
+			return $haystack =~ /\Q$needle\E/ ? 1 : 0;
+		}
+	}
+}
+
+sub _detect {
+	my ($haystack,$needle) = @_;
+	my @found;
+	my $j = 0;
+	while(-1 < (my $i = index $haystack, $needle, $j)) {
+		push @found, $i;
+		$j = $i + 1
+	};
+	@found
+}
+
+sub _interpolate {
+	my ($haystack,$needle,$replacement) = @_;
+	while(-1 != (my $i = rindex $haystack,$needle)) {
+		substr $haystack,$i,length($needle),$replacement
+	};
+	$haystack
+}
+
+sub _subst_rex {
+	my ($haystack,$needle,$replacement,$option) = @_;
+	if ($replacement =~ /\$([1-9])/) {
+		$haystack =~ $needle;
+		for my $i (1..9) {
+			my $n = "\$" . $i;
+			my $r = eval $n;
+			last if ! $r;
+			$replacement = _interpolate $replacement,$n,$r
+		}
+	} 
+	if ($option) {
+		$haystack =~ s|$needle|$replacement|g;
+	} else {
+		$haystack =~ s|$needle|$replacement|;
+	}
+	$haystack
+}
+
+sub _interpolate_rex {
+	my $input = shift;
+	my $needle = shift;
+	my $picker = shift;
+	my $haystack = $input;
+	my $output = '';
+	if ($haystack) {
+		my $n = -1;
+		while ($haystack =~ /$needle/) {
+#dump \@-, \@+;
+			my $p = $+[0];
+			my $l = $p - $-[0];
+			$output .= substr $haystack, 0, $p - $l;
+			my $x = substr($haystack, $p - $l, $l);
+			my $y = $_[++$n] ? $_[$n] : $picker->($x);
+			return $input if !defined($y);
+			$output .= $y;
+			$haystack = substr $haystack, $p;
+		}
+		$output .= $haystack;
+	}
+	$output
 }
 
 sub _flip_hash {
@@ -199,24 +335,34 @@ sub _flip_hash {
 	return %flip;
 }
 
-sub _persist_hash {
+sub _persist {
 	my $file = shift;
-	my $hashref = shift;
-	if ($hashref) {
+	my $ref = shift;
+	if ($ref) {
 		open my $out, '>:encoding(UTF-8)', $file or die "Can't open file \"$file\" : $!\n";
-		print {$out} dump $hashref;
+		print {$out} dump $ref;
 		close $out;
-#_diagnostic(pp(%{$hashref}));
+#_diagnostic(pp(%{$ref}));
 	} else {
 		open my $in, '<:encoding(UTF-8)', $file or die "Can't open file \"$file\" : $!\n";
 		{
 			local $/;    # slurp mode
-			$hashref = eval <$in>;
+			$ref = eval <$in>;
 		}
 		close $in;
-#dump $hashref;
-		return $hashref;
+#dump $ref;
+		return $ref;
 	}
+}
+
+sub _implicit {
+	my $file = _make_sure_file(_pathcombine(dirname(__FILE__), ".implicit"));
+	my %implicits = _hash(_persist $file);
+	return %implicits if ! @_;
+	return $implicits{$_[-1]} if @_ % 2;
+	my %items = @_;
+	$implicits{$_} = $items{$_} foreach (keys %items);
+	_persist $file, \%implicits;
 }
 
 sub _iterate_sorted_values {
@@ -231,6 +377,7 @@ sub _iterate_sorted_values {
 	}
 }
 
+#	returns	($name,$path,$suffix)
 sub _fileparse {
 	fileparse(shift, qr/\.[^.]*/);
 }
@@ -244,7 +391,7 @@ sub _files_in_dir {
 	my $dir = shift;
 	my $full = shift;
 	opendir(DIR, $dir) || die "Can't open directory : $!\n";
-	my @list = grep !/^\.\.?$/, readdir(DIR);
+	my @list = grep ! /^\.\.?$/, readdir(DIR);
 	if ($full) {
 		for (my $i = 0; $i < scalar(@list); $i++) {
 			$list[$i] = _pathcombine($dir, $list[$i]);
@@ -252,16 +399,6 @@ sub _files_in_dir {
 	}
 	closedir(DIR);
 	return @list;
-}
-
-sub _make_sure_file {
-	my $file = shift;
-	unlink $file if shift;
-	if (! -f $file) {
-		open my $fh, ">", $file || die "Can't open file : $!\n";
-		close $fh;
-	}
-	return $file;
 }
 
 sub _is_glob {
@@ -277,9 +414,36 @@ sub _glob_match {
 	return $str =~ /$glob/;
 }
 
+sub _dir_exists {
+	my $dir = shift;
+	$dir && -d $dir
+}
+
+sub _file_exists {
+	my $file = shift;
+	$file && -f $file
+}
+
+sub _make_sure_file {
+	my $file = shift;
+	unlink $file if shift;
+	if (! _file_exists $file) {
+		my @parts = _fileparse $file;
+		mkdir $parts[1] unless -d $parts[1];
+		open my $fh, ">", $file || die "Can't open file : $!\n";
+		close $fh;
+	}
+	return $file;
+}
+
 sub _contents_of_file {
 	my $file = shift;
-	open my $fh, '<:encoding(UTF-8)', "$file" || die "Can't open file : $!\n";
+	my $encode;
+	if (ref($file) eq 'ARRAY') {
+		$encode = $file->[1];
+		$file = $file->[0];
+	}
+	open my $fh, '<' . ($encode ? ":$encode" : ''), $file || die "Can't open file : $!\n";
 	local $/ = undef;    # slurp mode
 	my $contents = <$fh>;
 	close $fh;
@@ -288,11 +452,26 @@ sub _contents_of_file {
 
 sub _contents_to_file {
 	my $file = shift;
-	my $contents = shift;
-	open my $fh, '>:encoding(UTF-8)', "$file" || die "Can't open file : $!\n";
-	print $fh $contents;
+	my ($encode,$append);
+	if (ref($file) eq 'ARRAY') {
+		$encode = $file->[1];
+		$append = $file->[2];
+		$file = $file->[0];
+	}
+	open my $fh, ($append ? '>>' : '>') . ($encode ? ":$encode" : ''), $file || die "Can't open file : $!\n";
+	print $fh $_ foreach @_;
 	close $fh;
-	return $contents;
+}
+
+sub _extract_from {
+	my $contents = shift;
+	$contents = _file_exists($contents) ? _contents_of_file($contents) : $contents;
+	my $rex = _value_or_else '', shift;
+	my @extract = $contents =~ /$rex/g;
+	my $sep = looks_like_number($_[0]) ? $_separator[$_[0]] : $_[0];
+	return @extract if ! $sep;
+	$sep = _value_or_else $_separator[0], $sep;
+	return join $sep, @extract
 }
 
 sub _diagnostic {
@@ -300,7 +479,7 @@ sub _diagnostic {
 	my $diag = "/tmp/diag";
 	mkdir $diag unless -d $diag;
 	$diag = new File::Temp( DIR => $diag, UNLINK => 0 );
-	_contents_to_file $diag, $msg;
+	_contents_to_file [$diag,'encoding(UTF-8)'], $msg;
 }
 
 sub _tempFilename {
@@ -378,6 +557,8 @@ sub _binsearch_numeric {
 	return _binsearch {$desc ? $b <=> $a : $a <=> $b} $_[0], @{$_[1]};
 }
 
+
+
 sub _set_selection {
 	my $en = _value_or_else(undef,0,\@_);
 	if ($en) {
@@ -407,6 +588,15 @@ sub _replace_text {
 			_set_selection($en);
 		}
 	}
+}
+
+sub _object_from_XML {
+	my $fname = shift;
+	system("xmllint --noout \"$fname\"") and die $!;
+	my $xml = _contents_of_file($fname);
+	local $SIG{__WARN__} = sub { };
+	my $XML2JSON = XML::XML2JSON->new();
+	return $XML2JSON->xml2obj($xml);
 }
 
 sub _center_window {
@@ -447,18 +637,29 @@ sub _tkinit {
 	my $top = tkinit;
 	$top->withdraw if shift;
 	$top->title(_value_or_else('', shift));
+	my $font = shift;
+	$top->optionAdd('*font', $font) if $font;
 	$top
+}
+
+sub _choose_font {
+	my $mw = shift;
+	my $font = $mw->FontDialog->Show;
+	if ($font) {
+		$mw->optionAdd('*font', $font);
+		$mw->update;
+	}
 }
 
 sub _question {
 	use Tk::MsgBox;
-	my $top = shift;
+	my $top = _value_or_else sub{_tkinit(1)}, shift;
 	return lc($top->MsgBox(-message => shift, -title => shift, -type => "YesNo", -icon => 'question')->Show)
 }
 
 sub _message {
 	use Tk::MsgBox;
-	my $top = _tkinit(1);
+	my $top = _value_or_else sub{_tkinit(1)}, shift;
 	my $result = $top->MsgBox(-message => shift, -title => shift, -type => "ok")->Show;
 	$top->destroy;
 	$result
@@ -467,6 +668,7 @@ sub _message {
 sub _text_info {
 	my( $title, $text)= @_;
 	my $top = _tkinit 1, $title;
+	require Tk::ROText;
 	my $txt = $top->Scrolled("ROText", -scrollbars => 'e');
 	$txt->pack(-side => 'left', -fill => 'both', -expand => 1);
 	$txt->insert('end', $text);
@@ -500,29 +702,50 @@ sub _file_types {
 }
 
 sub _ask_file {
-	my $mw = shift;
-	my $title = shift;
-	my $file = shift;
-	my @types = _file_types(@_);
-	return $mw->getOpenFile(
-		-title => $title,
-		-initialdir => dirname($file),
-		-initialfile => basename($file),
-		-filetypes => \@types);
+	my $top = _value_or_else sub{_tkinit(1)}, shift;
+	my $title = _value_or_else '', shift;
+	my $file = _value_or_else sub{_implicit("file")}, shift;
+	my @types = _array(shift);
+	@types = _file_types if ! @types;
+	if (scalar(@types) == 1 && _win32()) {
+		push @types, @types;
+	}
+	my $dir = dirname(_value_or_else abs_path($0), $file);
+	$file = length($file) ? basename($file) : '';
+	if (shift) {
+		$file = $top->getSaveFile(
+			-title => $title,
+			-initialdir => $dir,
+			-initialfile => $file,
+			-filetypes => \@types);
+	} else {
+		$file = $top->getOpenFile(
+			-title => $title,
+			-initialdir => $dir,
+			-initialfile => $file,
+			-filetypes => \@types);
+	}
+	_implicit "file", $file if $file;
+	$file
 }
 
 sub _ask_directory {
-	my ($mw,$title,$dir) = @_;
-	return $mw->chooseDirectory(
+	my $top = _value_or_else sub{_tkinit(1)}, shift;
+	my $title = _value_or_else '', shift;
+	my $dir = _value_or_else sub{_implicit("directory")}, shift;
+	$dir = _value_or_else dirname(abs_path $0), $dir;
+	$dir = $top->chooseDirectory(
 		-title => $title,
 		-initialdir => $dir);
+	_implicit "directory", $dir if $dir;
+	$dir
 }
 
 sub _popup_menu {
 	my $win = shift;
 	my $postcommand = shift;
 	my @items = @_;
-	use Tk::Menu;
+#	use Tk::Menu;
 	my $menu = $win->Menu(-tearoff => 0, -postcommand => $postcommand);
 	while (defined($items[1])) {
 		my( $label, $command )= splice(@items,0,2);

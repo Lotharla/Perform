@@ -67,6 +67,9 @@ sub initialize {
 		});
 		$submenu->command(-label=>"Replace '\$...'", -command => sub{$self->prepare_output});
 		push @menus, $submenu;
+		if ($self->{initMenu}) {
+			$self->{initMenu}($self, $menu);
+		}
 	}
 }
 sub data {

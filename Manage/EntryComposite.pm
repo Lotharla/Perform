@@ -115,12 +115,11 @@ sub populate {
     my $mode = shift;
 	tie my @items,'Tk::Listbox', $self->{listbox};
 	$self->{items} = sub {
-		@items = @_ if defined $_[0];
+		@items = @{$_[0]} if defined $_[0];
 		@items
 	};
 	if ($mode == 1) {
-		my @params = @{$self->{params}};
-		$self->{items}->(@params);
+		$self->{items}->($self->{params});
 	} else {
 		$self->{data} = $self->data();
 		$self->history('');
@@ -143,7 +142,8 @@ sub history {
 			}
 		}
 		my %history = %{$data{'history'}};
-		$self->{items}->(sort values %history);
+		my @history = sort values %history;
+		$self->{items}->(\@history);
 	}
 	return %{$data{'history'}};
 }
@@ -258,14 +258,19 @@ sub commit {
     $self->SUPER::commit();
 }
 given (_value_or_else(0, _getenv('test'))) {
-	when ($_ > 1) {
+	when ($_ > 2) {
 		my $file = dirname(dirname abs_path $0) . '/.entries';
 		my $ec = new EntryComposite('file', $file, 'label', '<<--History-->>');
 		MainLoop();
 	}
-	when ($_ > 0) {
+	when ($_ > 1) {
 		my @paths = sort split( /:/, $ENV{PATH});
 		my $ec = new EntryComposite('title', 'Environment', 'label', 'Path', 'params', \@paths);
+		$ec->give(cwd());
+		MainLoop();
+	}
+	when ($_ > 0) {
+		my $ec = new EntryComposite('title', 'Environment', 'label', 'Current');
 		$ec->give(cwd());
 		MainLoop();
 	}

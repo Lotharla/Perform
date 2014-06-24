@@ -17,9 +17,11 @@ use Manage::Utils qw(
 	_combine
 	_getenv 
 	_value_or_else 
+	_interpolate_rex
 	_tkinit 
 	_set_selection 
 	_replace_text 
+	_file_types 
 	_ask_file 
 	_ask_directory
 );
@@ -77,26 +79,7 @@ sub make_Dollar {
 	return "\$" . sprintf(looks_like_number($what) ? '%d' : '{%s}', $what);
 }
 sub detect_dollar {
-	my $input = shift;
-	my $picker = shift;
-	my $output = '';
-	my $temp = $input;
-	if ($temp) {
-		my $n = -1;
-		while ($temp =~ /$dollar/) {
-#dump \@-, \@+;
-			my $p = $+[0];
-			my $l = $p - $-[0];
-			$output .= substr $temp, 0, $p - $l;
-			my $x = substr($temp, $p - $l, $l);
-			my $part = $_[++$n] ? $_[$n] : $picker->($x);
-			return $input if !defined($part);
-			$output .= $part;
-			$temp = substr $temp, $p;
-		}
-		$output .= $temp;
-	}
-	return $output
+	_interpolate_rex shift,$dollar,shift,@_
 }
 sub get_dollars {
 	%dollars = ();
@@ -131,7 +114,7 @@ sub inject {
 }
 sub what_is_dollar {
 	my $input = shift;
-	my $types = shift;
+	my @types = _file_types(shift);
 	my $output = '';
 	my @results = @_;
 	if (@results) {
@@ -174,7 +157,7 @@ sub what_is_dollar {
 			-text=>'Browse...', 
 			-command=> sub { 
 				my $answer = $choice eq 'f' ?
-					_ask_file($window, 'Choose file', -f $dollars{$key} ? $dollars{$key} : '', $types) :
+					_ask_file($window, 'Choose file', -f $dollars{$key} ? $dollars{$key} : '', \@types) :
 					_ask_directory($window, 'Choose directory', -d $dollars{$key} ? $dollars{$key} : ''); 
 				_replace_text($en, $answer) if $answer;
 			} )->grid(-row => 1, -column => 1);
@@ -207,6 +190,7 @@ given (_value_or_else(0, _getenv('test'))) {
 		say what_is_dollar(
 			"find \${DIR} -name \"\${GLOB}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null", 
 			[["No files", '']]);
+		MainLoop;
 	}
 	default {
 		1

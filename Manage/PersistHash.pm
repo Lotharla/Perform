@@ -1,8 +1,14 @@
 package PersistHash;
 use strict;
 use warnings;
-use Data::Dump qw(dump pp);
 use Tie::Hash;
+use File::Basename qw(dirname);
+use Cwd qw(abs_path cwd);
+use lib dirname(dirname abs_path $0);
+use Manage::Utils qw(
+	dump pp
+	_blessed
+);
 our @ISA = qw(Tie::StdHash);
 sub TIEHASH {
 	my $class = shift;
@@ -20,6 +26,7 @@ sub fetch {
 			local $/;    # slurp mode
 			$self = eval <$in>;
 		}
+		close $in;
 	}
 	return $self;
 }
@@ -28,7 +35,8 @@ sub store {
 	my $file = shift;
 	if ($file && -f $file) {
 		open my $out, '>:encoding(UTF-8)', $file or die "Can't open file \"$file\" : $!\n";
-		print {$out} dump $self;
+		my $blessed = _blessed($self);
+		print {$out} dump($blessed ? { %$self } : $self);
 		close $out;
 	}
 }
@@ -36,8 +44,6 @@ sub DESTROY {
 	my $self = shift;
 	my $file = $self->{__file__};
 	delete $self->{__file__};
-	use Data::Structure::Util qw( unbless );
-	unbless $self;
 	store($self, $file);
 }
 1;

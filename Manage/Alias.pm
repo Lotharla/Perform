@@ -13,7 +13,6 @@ use Manage::Utils qw(
 	dump 
 	_getenv 
 	_value_or_else 
-	_persist_hash 
 	_tkinit 
 	_set_selection 
 	_replace_text 
