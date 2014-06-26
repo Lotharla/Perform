@@ -16,6 +16,7 @@ use Manage::Utils qw(
 	_has_whitespace 
 	_split_on_whitespace 
 	_value_or_else 
+	_surround
 	_getenv
 	_chomp 
 	_combine 
@@ -40,7 +41,7 @@ use Manage::Utils qw(
 	_index_of
 );
 use Manage::Given qw(
-	isDollar hasDollar dollar_amount make_Dollar 
+	isDollar hasDollar dollar_amount make_dollar 
 	get_dollars set_dollars detect_dollar 
 	%dollars
 	@given 
@@ -92,8 +93,8 @@ ok $parts[1] =~ /c$/;
 my $didnt = "I didn't do it";
 @parts = _split_on_whitespace($didnt, 0);
 is scalar(@parts), 4;
-my %samples = ( 11 => "\$11", '1_1' => "\${1_1}", "D'oh" => "\${D'oh}", $didnt => "\${$didnt}", );
-is make_Dollar($_), $samples{$_}, '_'.$_.'_' foreach keys %samples;
+my %samples = ( 11 => "\$11", '2:dir' => "\${2:dir}", "D'oh" => "\${D'oh}", $didnt => "\${$didnt}", );
+is make_dollar($_), $samples{$_}, _surround(['_','_'],$_) foreach keys %samples;
 foreach (values %samples) { 
 	ok(hasDollar($_) && isDollar($_), $_) if !_has_whitespace($_) and index($_, "'") < 0 
 };
@@ -153,12 +154,12 @@ is_deeply scalar(@acca), 0;
 #_message("xxxyyyzzz","test");
 our @given = qw/I didn't do it/;
 my $pattern = "find \$4 -name \"\${FILES}\" -print | xargs grep \"\$2\" 2>/dev/null";
-is(place_given($pattern), 
-	"find it -name \"\${FILES}\" -print | xargs grep \"didn't\" 2>/dev/null");
+is place_given($pattern), 
+	"find it -name \"\${FILES}\" -print | xargs grep \"didn't\" 2>/dev/null";
 push @given, '';
 #dump \@given;
-is(place_given(_combine($pattern, "\$5")), 
-	"find it -name \"\${FILES}\" -print | xargs grep \"didn't\" 2>/dev/null\t");
+is place_given(_combine($pattern, "\$5")), 
+	"find it -name \"\${FILES}\" -print | xargs grep \"didn't\" 2>/dev/null\t";
 my $term = `gconftool-2 -g /desktop/gnome/applications/terminal/exec`;
 isnt $term, "gnome-terminal";
 is _chomp($term), "gnome-terminal";
@@ -166,13 +167,14 @@ $pattern = "find \${DIR} -name \"\${FILES}\" -print | xargs grep \"\$123\" 2>/de
 my $temp = {"\${DIR}"=>"xxx","\${FILES}"=>"yyy","\$123"=>"zzz"};
 is(detect_dollar($pattern, sub { $temp->{shift(@_)} }), 
 	"find xxx -name \"yyy\" -print | xargs grep \"zzz\" 2>/dev/null");
-$pattern = "find \${DIR} -name \"\${GLOB}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
-our %dollars;
-get_dollars($pattern);
-my $dolls = _capture_output(sub{print %dollars});
-is_deeply \%dollars, {'${DIR}'=>'DIR', '${GLOB}'=>'GLOB', '${PATTERN}'=>'PATTERN'}, $dolls;
-is set_dollars($pattern),
-	"find DIR -name \"GLOB\" -print | xargs grep -e \"PATTERN\" 2>/dev/null";
+my $dir = abs_path $0;
+@given = ();
+push @given, $dir, "**/*.*";
+$pattern = "find \${1:dir} -name \"\$2\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
+$dir = dirname $dir;
+is place_given($pattern), 
+	"find $dir -name \"**/*.*\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
+#	42
 ok -d dirname(dirname abs_path $0);
 $file = dirname(dirname abs_path $0) . "/.entries";
 ok -f $file;
@@ -251,8 +253,8 @@ $ENV{'given'} = "xxx\nzzz";
 ok _string_contains given_title('title'), "on 2 files", -1;
 delete $ENV{'given'};
 @given = _getenv('given', sub{()});
-is scalar(@given), 0;
-my $dir = dirname(dirname abs_path $0);
+is @given, 0;
+$dir = dirname(dirname abs_path $0);
 ok _dir_exists($dir);
 $_ = scalar(@_ = _extract_from(dirname(dirname abs_path $0) . "/Manage/Utils.pm", "sub\\s+(\\w+)"));
 is $_ / $_, 1;

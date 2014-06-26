@@ -14,6 +14,7 @@ use Manage::Utils qw(
 	_indexOf
 	_getenv
 	_now
+	_index_of
 	_tkinit
 	_center_window
 	_set_selection
@@ -58,8 +59,8 @@ sub initialize {
 	$self->{window}->bind('<Control-KeyPress-Up>', sub {$self->move_entry(-1)});
 	$self->{window}->bind('<Control-KeyPress-Down>', sub {$self->move_entry(+1)});
 	if ($mode > 0) {
-		$self->{window}->bind('<Control-KeyPress-Right>', sub {$self->move_point_in_time(+1)});
-		$self->{window}->bind('<Control-KeyPress-Left>', sub {$self->move_point_in_time(-1)});
+		$self->{window}->bind('<KeyPress-Down>', sub {$self->move_point_in_time(+1)});
+		$self->{window}->bind('<KeyPress-Up>', sub {$self->move_point_in_time(-1)});
 		$self->{popup} = _popup_menu($self->{window}, 
 			sub {
 				my $differs = $self->new_entry($self->item);
@@ -149,10 +150,21 @@ sub history {
 }
 sub selected {
     my $self = shift;
-    return undef if ! $self->{listbox}->curselection;
-	my $i = pop($self->{listbox}->curselection);
+	my $sel = $self->{listbox}->curselection;
+    return undef if ! $sel;
+	my $i = pop($sel);
 	my @items = $self->{items}->();
 	$items[$i];
+}
+sub update_list {
+	my $self = shift;
+	my $i = _index_of($self->item(), $self->{items}->());
+	if ($i > -1) {
+		my $sel = $self->{listbox}->curselection;
+		$self->{listbox}->selectionClear(pop $sel) if $sel;
+		$self->{listbox}->selectionSet($i);
+		$self->{listbox}->see($i)
+	}
 }
 sub move_entry {
     my $self = shift;
@@ -163,6 +175,7 @@ sub move_entry {
     $ptr++ if $ptr < -1;
 	$ptr %= scalar(@items);
 	$self->item($items[$ptr]);
+	$self->update_list();
 }
 sub timeline {
     my $self = shift;
@@ -208,6 +221,7 @@ sub move_point_in_time {
 		$self->item($history{$self->{point}});
 	}
 	_set_selection($self->{entry});
+	$self->update_list();
 }
 sub change_history {
     my $self = shift;
@@ -258,6 +272,7 @@ sub commit {
     $self->SUPER::commit();
 }
 given (_value_or_else(0, _getenv('test'))) {
+	no warnings 'numeric';
 	when ($_ > 2) {
 		my $file = dirname(dirname abs_path $0) . '/.entries';
 		my $ec = new EntryComposite('file', $file, 'label', '<<--History-->>');

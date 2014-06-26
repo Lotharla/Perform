@@ -37,7 +37,7 @@ my $command = _capture_output(
 			title => $title,
 			label => $label,
 			file => $file,
-			initMenu => sub {
+			extendMenu => sub {
 				my ($self, $menu) = @_;
 				my $submenu = $menu->cascade(-label=>'Run', -underline=>0, -tearoff => 'no')->cget('-menu');
 				$submenu->radiobutton(-label=>"in Terminal", -command => sub{ $self->{modifier} = 'Alt' });

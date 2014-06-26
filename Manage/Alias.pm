@@ -194,6 +194,7 @@ sub install_popup_button {
 }
 my $file = dirname(dirname abs_path $0) . "/.entries";
 given (_value_or_else(0, _getenv('test'))) {
+	no warnings 'numeric';
 	when ($_ > 1) {
 		$window = _tkinit(0);
 		tie %data, "PersistHash", $file;

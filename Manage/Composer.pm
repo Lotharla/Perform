@@ -19,7 +19,7 @@ use Manage::Given qw(
 	hasDollar
 	place_given
 	@given 
-	what_is_dollar
+	replace_dollar
 );
 use Manage::Alias qw(
 	resolve_alias
@@ -67,8 +67,8 @@ sub initialize {
 		});
 		$submenu->command(-label=>"Replace '\$...'", -command => sub{$self->prepare_output});
 		push @menus, $submenu;
-		if ($self->{initMenu}) {
-			$self->{initMenu}($self, $menu);
+		if ($self->{extendMenu}) {
+			$self->{extendMenu}($self, $menu);
 		}
 	}
 }
@@ -119,7 +119,7 @@ sub prepare_output {
 	my $output = $self->item;
 	if (hasDollar($output)) {
 		$output = place_given($self->item);
-		$output = what_is_dollar($output, assoc_file_types(), @_) if hasDollar($output);
+		$output = replace_dollar($output, assoc_file_types(), @_) if hasDollar($output);
 		return 0 if not $output;
 	}
 	$self->item($output);

@@ -11,6 +11,8 @@ use Cwd qw(abs_path);
 use lib dirname(dirname abs_path $0);
 use Manage::Utils qw(
 	dump
+	_lt
+	_gt
 	_getenv 
 	_value_or_else 
 	_flip_hash 
@@ -37,13 +39,11 @@ sub inject {
 	$obj = shift;
 	$window = $obj->{window};
 }
+sub set_data {	%data = @_	}
 sub assoc_ref {
-	my $key = shift;
-	my $value = shift;
 	%data = $obj->{data}->() if $obj;
 	return $data{'assoc'};
 }
-sub set_data {	%data = @_	}
 sub update_assoc {
 	my $glob = shift;
 	my $alias = shift;
@@ -76,7 +76,7 @@ sub assoc_file_types {
 	\@assoc_file_types
 }
 sub show_assoc {
-	my $btn_text = ['Add/Update', 'Remove', 'Cancel'];
+	my $btn_text = ['Add/Update', 'Remove', 'Close'];
 	my $dlg = $window->DialogBox(
 				-title => 'Associations',
 				-buttons => $btn_text,
@@ -129,13 +129,13 @@ sub refill {
 	}
 	undef @assoc_file_types;
 }
-my $file = dirname(dirname abs_path $0) . "/.entries";
 given (_value_or_else(0, _getenv('test'))) {
-	when ($_ < 0) {
+	when (_lt 0) {
+		my $file = dirname(dirname abs_path $0) . "/.entries";
 		tie %data, "PersistHash", $file;
 		dump assoc_file_types();
 	}
-	when ($_ > 0) {
+	when (_gt 0) {
 		%data = (
 			assoc => {
 				".pl" => "perl",

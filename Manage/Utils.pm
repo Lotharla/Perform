@@ -19,6 +19,8 @@ use Exporter::Easy (
 		looks_like_number
 		_max
 		_min
+		_gt
+		_lt
 		@_separator
 		$_whitespace
 		_combine
@@ -34,6 +36,7 @@ use Exporter::Easy (
 		_hash
 		_value_or_else
 		_getenv
+		_setenv
 		_now
 		_rndstr
 		_indexOf
@@ -88,6 +91,9 @@ use Exporter::Easy (
 );
 sub _max ($$) { $_[$_[0] < $_[1]] }
 sub _min ($$) { $_[$_[0] > $_[1]] }
+
+sub _gt { looks_like_number($_) && $_ gt shift }
+sub _lt { looks_like_number($_) && $_ lt shift }
 
 sub _win32 {
 	$^O eq 'MSWin32'
@@ -196,6 +202,12 @@ sub _getenv {
 	}
 	my @values = split(/$_separator[1]/, $value);
 	return scalar(@values) > 1 ? @values : $values[0];
+}
+
+sub _setenv {
+	my $key = _win32() ? uc($_[0]) : $_[0];
+	my $value = _value_or_else '', $_[1];
+	$ENV{$key} = $value;
 }
 
 sub _now {
