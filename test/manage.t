@@ -16,8 +16,10 @@ use Manage::Utils qw(
 	_has_whitespace 
 	_split_on_whitespace 
 	_value_or_else 
+	_is_value
 	_surround
 	_getenv
+	_setenv
 	_chomp 
 	_combine 
 	_flatten
@@ -27,6 +29,7 @@ use Manage::Utils qw(
 	_check_output 
 	_file_exists
 	_dir_exists
+	_files_in_dir
 	_transientFile 
 	_file_types 
 	_contents_of_file
@@ -39,11 +42,11 @@ use Manage::Utils qw(
 	_string_contains
 	_rndstr
 	_index_of
+	$_entries
 );
-use Manage::Given qw(
+use Manage::Resolver qw(
 	isDollar hasDollar dollar_amount make_dollar 
 	get_dollars set_dollars detect_dollar 
-	%dollars
 	@given 
 	given_title
 	place_given
@@ -77,22 +80,21 @@ is($tale, $words);
 sub my_words { 
 	print $words;
 }
-_check_output(\&my_words);
-our $_whitespace;
+_check_output(\&my_words, qr/^IT/, qr/.ork.$/);
 my @parts = split(/$_whitespace/, "", 2);
-is scalar(@parts), 0;
+is @parts, 0;
 @parts = split(/$_whitespace/, " ", 2);
-is scalar(@parts), 2;
+is @parts, 2;
 @parts = split(/$_whitespace/, " ", 0);
-is scalar(@parts), 0;
+is @parts, 0;
 @parts = _split_on_whitespace(join ("\t", ("AA", "BB", "cc")));
-is scalar(@parts), 2;
+is @parts, 2;
 ok $parts[0] =~ /^A.$/;
 ok $parts[1] =~ /^B/;
 ok $parts[1] =~ /c$/;
 my $didnt = "I didn't do it";
 @parts = _split_on_whitespace($didnt, 0);
-is scalar(@parts), 4;
+is @parts, 4;
 my %samples = ( 11 => "\$11", '2:dir' => "\${2:dir}", "D'oh" => "\${D'oh}", $didnt => "\${$didnt}", );
 is make_dollar($_), $samples{$_}, _surround(['_','_'],$_) foreach keys %samples;
 foreach (values %samples) { 
@@ -119,7 +121,7 @@ is_deeply \@_, [["All files", '*']];
 @_ = _file_types("No files", '');
 is_deeply \@_, [["All files", '*'], ["No files", '']];
 @_ = _file_types(\%assoc);
-is scalar(@_), 7;
+is @_, 7;
 #dump @_;
 #_ask_file _tkinit(0), 'Test', "$ENV{HOME}/work/bin/devel.sh", \@_;
 @_ = sort(keys %assoc);
@@ -137,8 +139,8 @@ PersistHash::store($acca, $file);
 ok -f $file;
 PersistHash::fetch($acca, $file);
 is_deeply $acca->{"assoc"}, \%assoc, "assoc";
-is_deeply $acca->{"cossa"}, \%cossa, "cossa";	#	30
-Manage::Assoc::set_data ( assoc => \%assoc );
+is_deeply $acca->{"cossa"}, \%cossa, "cossa";	#	32
+Manage::Assoc::inject( assoc => \%assoc );
 is find_assoc('.xxx'), '';
 update_assoc '.xxx', 'XXX';
 isnt find_assoc('.xxx'), '';
@@ -150,19 +152,20 @@ is_deeply \@_, \@acca;
 undef $acca;
 is_deeply _value_or_else(undef, $acca), $acca;
 @acca = _value_or_else(sub{()}, $acca);
-is_deeply scalar(@acca), 0;
-#_message("xxxyyyzzz","test");
-our @given = qw/I didn't do it/;
+is @acca, 0;
+@given = qw/I didn't do it/;
+is place_given("\$1"), "I";
+is place_given("\$0") =~ s/\t/ /gr, $didnt;
 my $pattern = "find \$4 -name \"\${FILES}\" -print | xargs grep \"\$2\" 2>/dev/null";
 is place_given($pattern), 
 	"find it -name \"\${FILES}\" -print | xargs grep \"didn't\" 2>/dev/null";
 push @given, '';
-#dump \@given;
 is place_given(_combine($pattern, "\$5")), 
 	"find it -name \"\${FILES}\" -print | xargs grep \"didn't\" 2>/dev/null\t";
 my $term = `gconftool-2 -g /desktop/gnome/applications/terminal/exec`;
 isnt $term, "gnome-terminal";
 is _chomp($term), "gnome-terminal";
+#	42
 $pattern = "find \${DIR} -name \"\${FILES}\" -print | xargs grep \"\$123\" 2>/dev/null";
 my $temp = {"\${DIR}"=>"xxx","\${FILES}"=>"yyy","\$123"=>"zzz"};
 is(detect_dollar($pattern, sub { $temp->{shift(@_)} }), 
@@ -174,9 +177,8 @@ $pattern = "find \${1:dir} -name \"\$2\" -print | xargs grep -e \"\${PATTERN}\" 
 $dir = dirname $dir;
 is place_given($pattern), 
 	"find $dir -name \"**/*.*\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
-#	42
 ok -d dirname(dirname abs_path $0);
-$file = dirname(dirname abs_path $0) . "/.entries";
+$file = $_entries;
 ok -f $file;
 {
 	tie my %data, "PersistHash", $file;
@@ -186,9 +188,8 @@ ok -f $file;
 	$temp = PersistHash::fetch({}, $file);
 	is_deeply $temp, \%data;
 }
-our @assoc_file_types;
 assoc_file_types();
-is scalar(@assoc_file_types), 6;
+is @assoc_file_types, 6;
 foreach my $type (@assoc_file_types) {
 	is find_assoc($_), @$type[0] foreach @{@$type[1]};
 }
@@ -200,13 +201,17 @@ my %alias = (
 			   "chmod a-x" => "chmod a-x \"\$1\"",
 			 },
 );
-Manage::Alias::set_data ( alias => \%alias );
+Manage::Alias::inject( alias => \%alias );
 update_alias("chmod|chmod a+x", $didnt);
 is resolve_alias("chmod|chmod a+x"), $didnt;
 is keys %alias, 3;
 update_alias("find|find-in-files", $pattern);
 is resolve_alias("find|find-in-files"), $pattern;
 is keys %alias, 4;
+%alias = ();
+update_alias("xxx|xxx-in-files", $didnt);
+is resolve_alias("xxx|xxx-in-files"), $didnt;
+is keys %alias, 1;
 use POSIX qw(tzset);
 my %history;
 foreach ('Europe/London', 'America/New_York', 'America/Los_Angeles') {
@@ -216,13 +221,12 @@ foreach ('Europe/London', 'America/New_York', 'America/Los_Angeles') {
 }
 if (%history) {
 	my @timeline = sort {$a <=> $b} keys %history;
-	my $len = scalar(@timeline);
-	if ($len > 1) {
+	if (@timeline > 1) {
 		$ENV{TZ} = 'Europe/Berlin';
 		tzset;
 		my $now = _now;
 		$history{$now} = $ENV{TZ};
-		is _binsearch_numeric($now, \@timeline), $len;
+		is _binsearch_numeric($now, \@timeline), @timeline;
 		is _binsearch_numeric($now, \@timeline, 1), 0;
 	}
 }
@@ -245,12 +249,25 @@ my %data2 = $closure->();
 is $data2{'history'}->{$now}, 'bla';
 is _flatten("1\n2\t3"), "1 2 3";
 is _combine('1',(2,3)), "1\t2\t3";
-$ENV{'given'} = "xxx";
+ok !_is_value(undef);
+ok !_is_value("");
+ok _is_value(0);
+ok _is_value([]);
+ok !_is_value(());
+@given=();
+ok _is_value(\@given);
+_setenv 'given', "xxx";
 @given = _getenv 'given';
 ok _string_contains given_title('title'), "on 'xxx'", -1;
-$ENV{'given'} = "xxx\nzzz";
+_setenv 'given', "xxx\nzzz";
 @given = _getenv 'given';
 ok _string_contains given_title('title'), "on 2 files", -1;
+_setenv 'given', undef;
+is _getenv('given', 'x'), 'x';
+_setenv 'given', '';
+is _getenv('given', 'x'), 'x';
+_setenv 'given', 0;
+is _getenv('given', 1), 0;		#	!!!
 delete $ENV{'given'};
 @given = _getenv('given', sub{()});
 is @given, 0;
@@ -260,7 +277,7 @@ $_ = scalar(@_ = _extract_from(dirname(dirname abs_path $0) . "/Manage/Utils.pm"
 is $_ / $_, 1;
 $file = dirname($dir) . "/bin/devel.sh";
 ok _file_exists($file);
-say _extract_from $file, "\\v(\\w+)\\)\\v", " ";
+ok _extract_from($file, "\\v(\\w+)\\)\\v", " ");
 $file = "/home/lotharla/work/Niklas/androidStuff/BerichtsheftApp/build.xml";
 ok _file_exists($file);
 my $obj = _object_from_XML($file);
@@ -289,6 +306,8 @@ ok $file !~ /\$\{([^\}]+)\}/, $file;
 $_ = _rndstr 8, @_;
 is length $_, 8;
 ok _index_of($_, @_) > -1 for split '', $_;
+say pp _files_in_dir "/tmp";
+#system("ls /tmp");
 =pod
 =cut
 exit;

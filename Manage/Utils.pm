@@ -21,27 +21,29 @@ use Exporter::Easy (
 		_min
 		_gt
 		_lt
+		_ne
+		_eq
 		@_separator
 		$_whitespace
 		_combine
 		_flatten
 		_escapeDoubleQuotes
-		_said
 		_chomp
 		_surround
 		_has_whitespace
 		_split_on_whitespace
 		_blessed
+		_is_type_of
 		_array
 		_hash
+		_is_value
 		_value_or_else
 		_getenv
 		_setenv
 		_now
 		_rndstr
-		_indexOf
 		_index_of
-		_contains
+		_array_contains
 		_duplicates
 		_string_contains
 		_detect
@@ -85,30 +87,34 @@ use Exporter::Easy (
 		_file_types
 		_ask_file
 		_ask_directory
-		_popup_menu
+		_menu
+		_create_popup_menu
+		_install_menu
 		_win32
+		$_entries
 	)],
 );
 sub _max ($$) { $_[$_[0] < $_[1]] }
 sub _min ($$) { $_[$_[0] > $_[1]] }
 
-sub _gt { looks_like_number($_) && $_ gt shift }
-sub _lt { looks_like_number($_) && $_ lt shift }
+sub _gt ($) { looks_like_number($_) && $_ > shift }
+sub _lt ($) { looks_like_number($_) && $_ < shift }
+sub _eq ($) { $_ eq shift }
+sub _ne ($) { $_ ne shift }
 
 sub _win32 {
 	$^O eq 'MSWin32'
 }
 
-our @_separator = ("\t", "\n");
+our @_separator = ("\t", "\n", "|");
 
 sub _combine {
-	join $_separator[0], @_;
+	join "\t", @_;
 }
-sub _said { _combine(@_) . $_separator[1] }
 
 sub _flatten {
 	my $string = shift;
-	$string =~ s/$_/ /g foreach @_separator;
+	$string =~ s/$_/ /g foreach ("\t", "\n");
 	$string
 }
 
@@ -146,7 +152,7 @@ sub _has_whitespace {
 
 sub _split_on_whitespace {
 	my $str = shift;
-	my $limit = scalar(@_) > 0 ? shift : 2;
+	my $limit = @_ > 0 ? shift : 2;
 	split(/$_whitespace/, $str, $limit)
 }
 
@@ -154,6 +160,9 @@ sub _array { ref($_[0]) eq 'ARRAY' ? @{$_[0]} : () }
 sub _hash { ref($_[0]) eq 'HASH' ? %{$_[0]} : () }
 
 sub _blessed { ref($_[0]) && UNIVERSAL::can($_[0],'can') }
+sub _is_type_of { _blessed($_[1]) && $_[1]->isa($_[0]) }
+
+sub _is_value { $_[0] || length($_[0]) }
 
 sub _value_or_else {
 	my $default = shift;
@@ -177,7 +186,7 @@ sub _value_or_else {
 					return exists $value{$key} ? $value{$key} : _value_or_else($default);
 				}
 				default {
-					return $key if $key;
+					return $key if _is_value($key);
 					if (ref($default) eq 'CODE') {
 						$default->()
 					} else {
@@ -193,7 +202,7 @@ sub _getenv {
 	my $key = _win32() ? uc($_[0]) : $_[0];
 	my $value = _value_or_else '', $key, \%ENV;
 	my $default = _value_or_else '', 1, \@_;
-	if (not $value) {
+	if (! _is_value($value)) {
 		return $default->() if ref($default) eq 'CODE';
 		return $default;
 	}
@@ -201,7 +210,7 @@ sub _getenv {
 		return $default;
 	}
 	my @values = split(/$_separator[1]/, $value);
-	return scalar(@values) > 1 ? @values : $values[0];
+	return @values > 1 ? @values : $values[0];
 }
 
 sub _setenv {
@@ -219,14 +228,6 @@ sub _rndstr {
 	join '', @_[ map { rand @_ } 1 .. shift ]
 }
 
-sub _indexOf {
-	my $value = shift;
-	my @array = @{$_[0]};
-	my $i = 0;
-	++$i until $i > $#array or $array[$i] eq $value;
-	return $i > $#array ? -1 : $i;
-}
-
 sub _index_of {
 	my $value = shift;
 	my @array = @_;
@@ -235,7 +236,7 @@ sub _index_of {
 	return $i > $#array ? -1 : $i;
 }
 
-sub _contains {
+sub _array_contains {
 	my @array = @{$_[0]};
 	my $value = $_[1];
 	my %hash = map { $_ => 1 } @array;
@@ -405,7 +406,7 @@ sub _files_in_dir {
 	opendir(DIR, $dir) || die "Can't open directory : $!\n";
 	my @list = grep ! /^\.\.?$/, readdir(DIR);
 	if ($full) {
-		for (my $i = 0; $i < scalar(@list); $i++) {
+		for (my $i = 0; $i < @list; $i++) {
 			$list[$i] = _pathcombine($dir, $list[$i]);
 		}
 	}
@@ -456,6 +457,7 @@ sub _contents_of_file {
 		$file = $file->[0];
 	}
 	open my $fh, '<' . ($encode ? ":$encode" : ''), $file || die "Can't open file : $!\n";
+	no warnings;
 	local $/ = undef;    # slurp mode
 	my $contents = <$fh>;
 	close $fh;
@@ -537,9 +539,8 @@ sub _check_output {
 	my @rgx = @_;
 	my $output = _capture_output($func);
 	foreach my $rg (@rgx) { 
-		ok($output =~ $rg)
+		ok($output =~ $rg, $output)
 	}
-	say sprintf("output : '%s'", $output);
 }
 
 sub _binsearch (&$\@) {
@@ -692,8 +693,7 @@ sub _file_types {
 	my @types = (
 		["All files", '*'],
 	);
-	my $len = scalar(@_);
-	if ($len) {
+	if (@_) {
 		given(ref($_[0])) {
 			when ('ARRAY') {
 				push(@types, $_) foreach @{$_[0]};
@@ -703,8 +703,8 @@ sub _file_types {
 				my %flip = _flip_hash(\%hash);
 				push(@types, [$_, $flip{$_}]) foreach (keys %flip)
 			}
-			when ($len != 1) {
-				for (my $i = 0; $i < ($len - 1); $i += 2) {
+			when (@_ != 1) {
+				for (my $i = 0; $i < (@_ - 1); $i += 2) {
 					push(@types, [$_[$i], $_[$i + 1]])
 				}
 			}
@@ -719,7 +719,7 @@ sub _ask_file {
 	my $file = _value_or_else sub{_implicit("file")}, shift;
 	my @types = _array(shift);
 	@types = _file_types if ! @types;
-	if (scalar(@types) == 1 && _win32()) {
+	if (@types == 1 && _win32()) {
 		push @types, @types;
 	}
 	my $dir = dirname(_value_or_else abs_path($0), $file);
@@ -753,25 +753,49 @@ sub _ask_directory {
 	$dir
 }
 
-sub _popup_menu {
+sub _menu {
+	my $win = shift;
+	$win->configure(-menu => my $menu = $win->Menu);
+	$menu
+}
+
+sub _create_popup_menu {
 	my $win = shift;
 	my $postcommand = shift;
-	my @items = @_;
-#	use Tk::Menu;
 	my $menu = $win->Menu(-tearoff => 0, -postcommand => $postcommand);
-	while (defined($items[1])) {
-		my( $label, $command )= splice(@items,0,2);
-		$menu->add('command', -label => $label, -command => $command);
-	}
 	$win->bind('<3>', [sub {
 		my ($self, $x, $y) = @_;
-		$menu->post($win->x + $x, $win->y + $y);
+		$x += $win->x();
+		$y += $win->y();
+		$menu->post($x, $y);
 	}, Ev('x'), Ev('y')]);
 	$win->bind('<1>', [sub {
 		$menu->unpost;
 	}, Ev('x'), Ev('y')]);
+	$menu;
+}
+
+sub _install_menu {
+	my $obj = shift;
+	my $postcommand = shift;
+	my @items = @_;
+	my $menu;
+	if (_is_type_of("Tk::Menu",$obj)) {
+		$menu = $obj->cascade(-label => pop(@items), 
+			-underline => 0, 
+			-tearoff => 'no',
+			-postcommand => $postcommand
+		)->cget('-menu');
+	} else {
+		$menu = _create_popup_menu($obj, $postcommand);
+	}
+	while (defined($items[1])) {
+		my( $label, $command )= splice(@items,0,2);
+		$menu->add('command', -label => $label, -command => $command);
+	}
 	$menu
 }
 
+our $_entries = dirname(dirname  __FILE__) . "/.entries";
 1;
 

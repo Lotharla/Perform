@@ -6,7 +6,7 @@ use feature qw(say switch);
 use Tk;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
-use lib dirname(dirname abs_path $0);
+use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
 	_chomp
@@ -14,12 +14,14 @@ use Manage::Utils qw(
 	_value_or_else 
 	_getenv
 	_set_selection
+	_menu
+	_install_menu
 );
-use Manage::Given qw(
+use Manage::Resolver qw(
 	hasDollar
-	place_given
 	@given 
-	replace_dollar
+	place_given
+	resolve_dollar
 );
 use Manage::Alias qw(
 	resolve_alias
@@ -40,37 +42,49 @@ sub new {
 sub initialize {
     my( $self ) = @_;
     $self->SUPER::initialize();
-	if ($self->mode > 1) {
-		$self->{window}->configure(-menu => my $menu = $self->{window}->Menu());
-		my @menus;
-		push @menus, install_menu_button($menu, 'Alias', sub { 
-			my $value = shift; 
-			$self->item($value) if $value;
-			_set_selection($self->{entry});
-		});
-		$menus[0]->configure('-underline', 0);
-		my $submenu;
-		push @menus, $menu->command(-label=>'Associations', -underline=>1, -command => sub{
-			$submenu->unpost;
-			show_assoc
-		});
-		$submenu = $menu->cascade(-label=>'Edit', -underline=>0, -tearoff => 'no',
-			-postcommand => sub{
-				my $possible = hasDollar($self->item);
-				$submenu->entryconfigure(0, -state => $possible ? 'normal' : 'disabled');
-				$submenu->entryconfigure(1, -state => $possible ? 'normal' : 'disabled');
-			}
-		)->cget('-menu');
-		$submenu->command(-label=>'Place given', -command => sub{
+	my $menu = _menu($self->{window});
+	my $submenu;
+	$submenu = install_menu_button($menu, 'Alias', sub { 
+		my ($path, $value) = @_; 
+		$self->item($value) if $value;
+		_set_selection($self->{entry});
+	});
+	$submenu->configure('-underline', 0);
+	$menu->command(-label=>'Associations', -underline=>1, -command => sub{
+		$submenu->unpost;
+		show_assoc
+	});
+	$submenu = _install_menu($menu, 
+		sub {
+			my $possible = hasDollar($self->item);
+			$submenu->entryconfigure(0, -state => $possible ? 'normal' : 'disabled');
+			$submenu->entryconfigure(1, -state => $possible ? 'normal' : 'disabled');
+		}, 
+		"Resolve '\$...'", sub{$self->prepare_output}, 
+		'Place given', sub {
 			$self->item(place_given($self->item));
 			_set_selection($self->{entry});
-		});
-		$submenu->command(-label=>"Replace '\$...'", -command => sub{$self->prepare_output});
-		push @menus, $submenu;
-		if ($self->{extendMenu}) {
-			$self->{extendMenu}($self, $menu);
-		}
+		},
+		'Edit'
+	);
+	if ($self->use_history) {
+		$self->history_menu($menu);
+	} else {
+		$self->options_menu($menu);
 	}
+	if ($self->{extendMenu}) {
+		$self->{extendMenu}($self, $menu);
+	}
+}
+sub history_menu {
+	my $self = shift;
+	my $menu = shift;
+	$self->SUPER::history_menu($menu) if defined($menu);
+}
+sub options_menu {
+	my $self = shift;
+	my $menu = shift;
+	$self->SUPER::options_menu($menu) if defined($menu);
 }
 sub data {
 	my $self = shift;
@@ -90,15 +104,17 @@ sub populate {
 	if ($mode > 1) {
 		Manage::Alias::inject($self);
 		Manage::Assoc::inject($self);
-		Manage::Given::inject($self);
+		Manage::Resolver::inject($self);
 	}
 	@given = _getenv('given');
 	$self->pre_select($given[0]);
 }
 sub save {
 	my $self = shift;
-	my %data = $self->{data}->();
-	PersistHash::DESTROY \%data;     
+	if ($self->{data}) {
+		my %data = $self->{data}->();
+		PersistHash::DESTROY \%data;     
+	}
 }
 sub pre_select {
 	my $self = shift;
@@ -118,8 +134,7 @@ sub prepare_output {
 	my $self = shift;
 	my $output = $self->item;
 	if (hasDollar($output)) {
-		$output = place_given($self->item);
-		$output = replace_dollar($output, assoc_file_types(), @_) if hasDollar($output);
+		$output = resolve_dollar($output, assoc_file_types(), @_);
 		return 0 if not $output;
 	}
 	$self->item($output);

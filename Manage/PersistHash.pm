@@ -4,7 +4,7 @@ use warnings;
 use Tie::Hash;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path cwd);
-use lib dirname(dirname abs_path $0);
+use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
 	_blessed

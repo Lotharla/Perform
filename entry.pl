@@ -14,10 +14,9 @@ use Manage::Utils qw(
 	_value_or_else 
 );
 use Manage::EntryComposite;
-new EntryComposite(
+(new EntryComposite(
 	title => _getenv('title'), 
 	label => _getenv('label'),
 	width => _getenv('width'),
 	params => \@ARGV
-);
-MainLoop();
+))->relaunch;

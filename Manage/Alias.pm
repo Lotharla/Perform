@@ -6,138 +6,189 @@ use feature qw(say switch);
 use Tk;
 use Tk::Menu;
 use Tk::DialogBox;
+use Tk::BrowseEntry;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
-use lib dirname(dirname abs_path $0);
+use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
-	dump 
+	dump pp
+	_gt _lt
+	_blessed
 	_getenv 
 	_value_or_else 
+	_make_sure_file
 	_tkinit 
+	_menu
 	_set_selection 
 	_replace_text 
 	_center_window
+	$_entries
+	@_separator
 );
 use Manage::PersistHash;
 use Exporter::Easy (
 	OK => [ qw(
-		cascades
 		resolve_alias
 		update_alias
-		set_data
-		ask_expression
-		create_menu
+		ask_alias
 		install_menu_button
-		show_menu
 		install_popup_button
 	)],
 );
 my ($obj, $window, %data);
 sub inject {
-	$obj = shift;
-	$window = $obj->{window};
+	$obj = $_[0];
+	if (_blessed $obj) {
+		$window = $obj->{window};
+		%data = $obj->{data}->();
+	} else {
+		undef $obj;
+		undef $window;
+		%data = @_;
+	}
+	$data{'alias'} = {} if !exists($data{'alias'});
 }
-sub alias_ref {
-	my $key = shift;
-	my $value = shift;
-	%data = $obj->{data}->() if $obj;
-	return $data{'alias'};
-}
-sub set_data {	%data = @_	}
-my $path_sep = qr/\|/;
+my $path_rex = "\\$_separator[2]";
 sub resolve_alias {
 	my $path = shift;
-	my $href = alias_ref;
-	for (;;) {
-		my @parts = split(/$path_sep/, $path, 2);
-		my $name = $parts[0];
-		if (scalar(@parts) < 2) {
-			return $href->{$name};
-		} elsif (not exists $href->{$name}) {
-			last;
+	if ($path) {
+		my $href = $data{'alias'};
+		for (;;) {
+			my @parts = split(/$path_rex/, $path, 2);
+			my $name = $parts[0];
+			if (@parts < 2) {
+				return $href->{$name};
+			} elsif (not exists $href->{$name}) {
+				last;
+			}
+			$href = $href->{$name};
+			$path = $parts[1]
 		}
-		$href = $href->{$name};
-		$path = $parts[1]
 	}
 	''
 }
 sub update_alias {
-	my( $path, $value )= @_;
-	my $href = alias_ref;
-	my $_path = $path;
+	my ($path, $value) = @_;
+	my $href = $data{'alias'};
+	my $p = $path;
+	return if ! $p;
 	for (;;) {
-		my @parts = split(/$path_sep/, $path, 2);
-		my $final = scalar(@parts) < 2 ? 1 : 0;
+		my @parts = split(/$path_rex/, $p, 2);
 		my $name = $parts[0];
-		if ($final) {
+		if (@parts < 2) {
 			if ($value) {
 				$href->{$name} = $value;
 			} else {
 				delete $href->{$name};
-				if (scalar(keys %$href) < 1) {
-					update_alias (substr($_path, 0, length($_path)-length($name)-1));
+				if (keys %$href < 1) {
+					my $len = length($path) - length($name) - 1;
+					update_alias(substr($path, 0, $len)) if $len;
 				}
 			}
-		} elsif (not exists $href->{$name}) {
+			last;
+		}
+		unless (ref($href->{$name}) eq 'HASH') {
+			last if ! $value;
 			$href->{$name} = {};
 		}
-		last if $final;
 		$href = $href->{$name};
-		$path = $parts[1]
+		$p = $parts[1]
 	}
 }
-sub ask_expression {
-	my( $path, $value )= @_;
-	my $dlg = $window->DialogBox(
-		-title => "Expression",
-		-buttons => ['OK', 'Update/Add', 'Remove', 'Cancel'],
-		-default_button => 'Cancel');
-	$dlg->Label( -text => 'Path' )->grid(-row => 0, -column => 0);
-	$dlg->Entry( -width => 50,
-		-textvariable => \$path)->grid(-row => 0, -column => 1);
-	$dlg->Label( -text => 'Value' )->grid(-row => 1, -column => 0);
-	my $en = $dlg->Entry( -width => 50,
-		-textvariable => \$value)->grid(-row => 1, -column => 1);
-	_set_selection($en);
-	given($dlg->Show) {
-		when ('Update/Add') {
-			update_alias $path, $value;
-			return $value
-		}
-		when ('Remove') {
-			update_alias $path;
-		}
-		when ('OK') {
-			return $value
+sub iterate_paths {
+	my $func = shift;
+	my $prefix = _value_or_else '', shift;
+	my %hash = _value_or_else sub{%{$data{'alias'}}}, shift;
+	foreach my $key (sort keys %hash) {
+		my $path = $prefix ? join($_separator[2],$prefix,$key) : $key;
+		my $value = $hash{$key};
+		given (ref($value)) {
+			when ('HASH') {
+				iterate_paths($func, $path, $value) 
+			}
+			default {
+				$func->($path)
+			}
 		}
 	}
-	''
+}
+sub ask_alias {
+	my ($path, $value)= @_;
+	my @buttons = $path ? 
+		('OK','Add/Update','Remove','Cancel') :
+		('Add/Update','Remove','Close');
+	if (! $path && UNIVERSAL::can($obj,'item')) {
+		$value = $obj->item;
+	}
+	my $dlg = $window->DialogBox(
+		-title => "Alias",
+		-buttons => \@buttons,
+		-default_button => $buttons[@buttons > 3 ? 0 : -1]);
+	$dlg->Label( -text => 'Path' )->grid(-row => 0, -column => 0);
+	my ($be,$en);
+	$be = $dlg->BrowseEntry(
+		-listcmd => sub {
+			$be->delete(0,'end');
+			iterate_paths sub {
+				$be->insert('end', $_[0]);
+			};
+		},
+		-browsecmd => sub {
+			$value = resolve_alias $path
+		},
+		-variable => \$path
+	)->grid(-row => 0, -column => 1);
+	$dlg->Label( -text => 'Value' )->grid(-row => 1, -column => 0);
+	$en = $dlg->Entry( 
+		-takefocus => 1,
+		-width => 50,
+		-textvariable => \$value
+	)->grid(-row => 1, -column => 1);
+	_set_selection($en);
+ask:
+	given($dlg->Show) {
+		when ($buttons[@buttons > 3 ? 0 : -1]) {
+			return ($path, $value)
+		}
+		when ($buttons[@buttons > 3 ? 1 : 0]) {
+			update_alias $path, $value;
+			goto ask;
+		}
+		when ($buttons[@buttons > 3 ? 2 : 1]) {
+			update_alias $path;
+			goto ask;
+		}
+	}
+	()
 }
 sub cascades {
-	my( $menu, $name, $href, $func )= @_;
-	my @parts = split(/$path_sep/, $name);
+	my( $menu, $name, $func, $href )= @_;
+	my @parts = split(/$path_rex/, $name);
 	$menu = $menu->cascade(
 		-label   => $parts[$#parts],
 		-tearoff => 0
 	) if $name;
-	my %hash = $href ? %{$href} : %{alias_ref()};
+	my %hash = $href ? %{$href} : %{$data{'alias'}};
 	foreach my $key (sort keys(%hash)) {
+		my $path = $href ? join($_separator[2],$name,$key) : $key;
 		my $value = $hash{$key};
-		my $path = $href ? join('|', $name, $key) : $key;
 		given (ref($value)) {
 			when ('HASH') {
-				cascades($menu, $path, $value, $func) 
+				cascades($menu, $path, $func, $value) 
 			}
 			default {
 				$menu->command(
 					-label   => $key,
-					-command => [ $func, $value, $path ]
+					-command => [ $func, $path, $value ]
 				)
 			}
 		}
 	};
 }
 my $popup = undef;
+sub cancel_popup {
+	undef $popup if $popup; 
+}
 my $modify = 0;
 sub create_menu {
 	my( $menu, $name, $func )= @_;
@@ -146,17 +197,20 @@ sub create_menu {
 		-onvalue => 1, -offvalue => 0, 
 		-variable => \$modify,
 		-command => sub { 
-			undef $popup if $popup; 
+			if ($modify) {
+				ask_alias "", "";
+			}
+			cancel_popup; 
 		}
 	);
 	$menu->separator;
-	cascades $menu, $name, undef, sub { 
-		my( $value, $path )= @_;
+	cascades $menu, $name, sub { 
+		my ($path, $value) = @_;
 		if ($modify) {
-			$value = ask_expression $path, $value;
+			($path, $value) = ask_alias $path, $value;
 		}
-		$func->($value, $path); 
-		undef $popup if $popup; 
+		$func->($path, $value);
+		cancel_popup;
 	};
 }
 sub install_menu_button {
@@ -172,15 +226,15 @@ sub install_menu_button {
 	);
 	$btn
 }
-sub show_menu {
+sub toggle_popup {
 	my ($widget, $func) = @_;
 	if (defined $popup) {
 		$popup->unpost;
-		undef $popup
+		cancel_popup;
 	} else {
 		$popup = $window->Menu(-tearoff => 0);
 		create_menu $popup, '', $func;
-		$popup->post($window->x + $widget->x, $window->y + $widget->y + $widget->height)
+		$popup->post($window->x() + $widget->x(), $window->y() + $widget->y() + $widget->height)
 	}
 }
 sub install_popup_button {
@@ -188,29 +242,30 @@ sub install_popup_button {
 	my $btn;
 	$btn = $window->Button(
 		-text   => $label,
-		-command => sub {show_menu($btn, $func)}
+		-command => sub {toggle_popup($btn, $func)}
 	);
 	$btn
 }
-my $file = dirname(dirname abs_path $0) . "/.entries";
 given (_value_or_else(0, _getenv('test'))) {
-	no warnings 'numeric';
-	when ($_ > 1) {
+	when (_gt 1) {
+		tie %data, "PersistHash", $_entries;
 		$window = _tkinit(0);
-		tie %data, "PersistHash", $file;
-		$window->configure(-menu => my $menu = $window->Menu);
-		install_menu_button($menu, 'Alias', sub { my $value = shift; say $value if $value });
+		install_popup_button('Alias', sub { say pp @_ })->pack;
 		_center_window ($window);
 		MainLoop();
 	}
-	when ($_ > 0) {
+	when (_gt 0) {
+		my $file = "/tmp/.entries";
+		_make_sure_file $file;
 		tie %data, "PersistHash", $file;
+		inject(%data);
 		$window = _tkinit(0);
-		install_popup_button('Alias', sub { my $value = shift; say $value if $value })->pack;
+		install_menu_button(_menu($window), 'Alias', sub { say pp @_ });
 		_center_window ($window);
 		MainLoop();
+		dump \%data;
 	}
-	when ($_ < 0) {
+	when (_lt 0) {
 		%data = (
 			alias => {
 				ant   => "bash /home/lotharla/work/bin/ant-or-make.sh \"\$1\"",
@@ -221,14 +276,14 @@ given (_value_or_else(0, _getenv('test'))) {
 						 },
 			},
 		);
-		$window = &tk_init(0);
-		$window->configure(-menu => my $menu = $window->Menu);
-		cascades $menu, 'Alias', undef, sub { 
-			my( $value, $path )= @_;
-			say ask_expression ( $path, $value ) 
+#		%data = ( alias => {} );
+		$window = _tkinit(0);
+		cascades _menu($window), 'Alias', sub { 
+			say pp ask_alias(@_);
 		};
 		_center_window ($window);
 		MainLoop();
+		dump \%data;
 	}
 	default {
 		1

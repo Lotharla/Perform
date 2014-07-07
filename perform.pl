@@ -21,8 +21,9 @@ use Manage::Utils qw(
 	_tkinit
 	_center_window
 	_text_info
+	$_entries
 );
-use Manage::Given qw(
+use Manage::Resolver qw(
 	@given
 	given_title
 );
@@ -32,19 +33,18 @@ my $command = _capture_output(
 	sub {
 		my $title = given_title("Perform ...");
 		my $label = _getenv('label', '');
-		my $file = dirname(abs_path $0) . '/.entries';
 		my $obj = new Composer( 
 			title => $title,
 			label => $label,
-			file => $file,
+			file => $_entries,
 			extendMenu => sub {
 				my ($self, $menu) = @_;
 				my $submenu = $menu->cascade(-label=>'Run', -underline=>0, -tearoff => 'no')->cget('-menu');
-				$submenu->radiobutton(-label=>"in Terminal", -command => sub{ $self->{modifier} = 'Alt' });
-				$submenu->radiobutton(-label=>"and capture output", -command => sub{ $self->{modifier} = 'Control' });
+				$submenu->radiobutton(-label=>"in terminal", -command => sub{ $self->{modifier} = 'Alt' });
+				$submenu->radiobutton(-label=>"capture output", -command => sub{ $self->{modifier} = 'Control' });
 			}
 		);
-		MainLoop();
+		$obj->relaunch;
 		$modifier = $obj->{modifier};
 	}
 );

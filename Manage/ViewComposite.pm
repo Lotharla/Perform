@@ -7,9 +7,10 @@ use Tk;
 use Tk::NoteBook;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
-use lib dirname(dirname abs_path $0);
+use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
+	_gt _lt
 	_chomp
 	_combine
 	_value_or_else 
@@ -59,11 +60,10 @@ sub populate {
 	}
 }
 given (_value_or_else(0, _getenv('test'))) {
-	when ($_ > 0) {
+	when (_gt 0) {
 		my $dir = "/tmp/diag";
 		my @files = _files_in_dir($dir, 1);
-		new ViewComposite('title', $dir, 'params', \@files);
-		MainLoop();
+		(new ViewComposite('title', $dir, 'params', \@files))->relaunch;
 	}
 	default {
 		1

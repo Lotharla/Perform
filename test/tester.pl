@@ -4,7 +4,7 @@ use strict;
 use X11::GUITest qw(:ALL);
 
 # tested application
-my $tested_app               = './composer.t';
+my $tested_app               = 'testing=-1 ./composer.t';
 my $tested_app_title         = "Testing";
 my $edit_title               = 'This is an edit window';
 my $delay_between_keystrokes = 1000;

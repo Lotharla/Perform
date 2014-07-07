@@ -1,4 +1,4 @@
-package Manage::Given;
+package Manage::Resolver;
 use strict;
 use warnings;
 no warnings 'experimental';
@@ -11,13 +11,14 @@ use Tk::NoteBook;
 use feature qw(say switch);
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
-use lib dirname(dirname abs_path $0);
+use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
-	_gt
+	_gt _lt
 	_combine
 	_getenv 
 	_setenv
+	_is_value
 	_value_or_else 
 	_interpolate_rex
 	_tkinit 
@@ -41,7 +42,7 @@ use Exporter::Easy (
 		get_dollars
 		set_dollars
 		place_given
-		replace_dollar
+		resolve_dollar
 	)],
 );
 our @given = _getenv('given', sub{ () });
@@ -60,61 +61,73 @@ sub append_given {
 	}
 	$output
 }
-our %dollars;
+my %dollars;
 BEGIN {
 	tie %dollars, 'Tie::IxHash';
 }
 my $dollar = qr/\$(\d+)|\$\{(\w+)(\:(\w+))?\}/;
 sub hasDollar {
-	my $str = _value_or_else '', shift;
-	return $str =~ $dollar
+	_value_or_else('', shift) =~ $dollar
 }
 sub isDollar {
-	return shift(@_) =~ m[^$dollar$]
+	shift(@_) =~ m[^$dollar$]
 }
 sub dollar_amount {
 	$_[0] =~ /$dollar/;
-	$1 ? $1 : ($3?[$2,$4]:$2)
-}
-sub detect_dollar {
-	_interpolate_rex shift,$dollar,shift,@_
+	_is_value($1) ? 
+		$1 : 
+		($3?[$2,$4]:$2)
 }
 sub make_dollar {
 	my $amount = shift;
 	if (ref($amount) eq 'ARRAY') {
 		$amount = $amount->[0] . ':' . $amount->[1];
 	}
-	return "\$" . sprintf(looks_like_number($amount) ? '%d' : '{%s}', $amount);
+	"\$" . sprintf(looks_like_number($amount) ? '%d' : '{%s}', $amount)
 }
-sub given_for_dollar {
-	my $key = shift;
-	my $a = $dollars{$key}->{amount};
-	$a = ref($a) eq 'ARRAY' ? $a->[0] : $a;
-	if (looks_like_number($a) && $a < @given + 1 && $a > 0) {
-		return $given[$a - 1];
-	} else {
-		return make_dollar($a);
+sub make_value {
+	my ($amount,$value) = @_;
+	if (ref($amount) eq 'ARRAY') {
+		if ($amount->[1] eq 'dir' && -f $value) {
+			$value = dirname $value;
+		}
 	}
+	$value
+}
+sub is_given {
+	my $amount = shift;
+	my $a = ref($amount) eq 'ARRAY' ? $amount->[0] : $amount;
+	looks_like_number($a) && $a >= 0 && $a < @given + 1 ?
+		$a : -1
+}
+sub detect_dollar {
+	_interpolate_rex shift,$dollar,shift,@_
 }
 sub get_dollars {
 	%dollars = ();
 	detect_dollar (shift, sub {
 		my $key = $_[0];
 		$dollars{$key} = { amount => dollar_amount(@_), value => $key };
-		$dollars{$key}->{value} = given_for_dollar $key;
+		my $amount = $dollars{$key}->{amount};
+		my $x = is_given($amount);
+		given ($x) {
+			when (0) {
+				$x = _combine map { make_value $amount, $_ } @given;
+			}
+			when (_gt 0) {
+				$x = make_value $amount, $given[$x - 1];
+			}
+			default {
+				$x = make_dollar($amount);
+			}
+		}
+		$dollars{$key}->{value} = $x;
 	});
 	%dollars
 }
 sub set_dollars {
 	return detect_dollar (shift, sub {
-		my $value = $dollars{$_[0]}->{value};
-		my $amount = $dollars{$_[0]}->{amount};
-		if (ref($amount) eq 'ARRAY') {
-			if ($amount->[1] eq 'dir' && -f $value) {
-				$value = dirname $value;
-			}
-		}
-		$value
+		make_value $dollars{$_[0]}->{amount}, $dollars{$_[0]}->{value}
 	});
 }
 sub place_given {
@@ -122,13 +135,13 @@ sub place_given {
 	get_dollars($input);
 	set_dollars($input)
 }
-my ($obj, $window, $width);
+my ($window, $width);
 sub inject {
-	$obj = shift;
-	$width = _value_or_else(75, 'width', $obj);
+	my $obj = shift;
 	$window = $obj->{window};
+	$width = _value_or_else(75, 'width', $obj);
 }
-sub replace_dollar {
+sub resolve_dollar {
 	my $input = shift;
 	my @types = _file_types(shift);
 	my $output = '';
@@ -151,11 +164,13 @@ sub replace_dollar {
 		$en = $tab->Entry(
 			-width => _value_or_else(75, $width),
 			-textvariable => \$dollars{$key}->{value}
-		)->grid(-row => 0, -column => 0, -columnspan => 4);
-		my $btn = $tab->Menubutton( 
-			-text => 'Given', 
+		)->pack(-side => 'top', -fill=>'x', -expand=>1);
+		my $frm = $tab->Frame()->pack(-side => 'bottom', -fill=>'x', -expand=>1);
+		my $row = 0;
+		my $btn = $frm->Menubutton( 
+			-text => 'given', 
 			-tearoff => 0,
-		)->grid(-row => 1, -column => 0);
+		)->grid(-row => $row, -column => 0);
 		my $menu = $btn->cget('-menu');
 		foreach my $gift (@given) {
 			$menu->command(-label => $gift, 
@@ -169,7 +184,7 @@ sub replace_dollar {
 			$ba->attach($btn,-initwait => 0,-balloonmsg => "no given items");
 		}
 		my $choice = 'f';
-		$tab->Button( 
+		$frm->Button( 
 			-text=>'Browse...', 
 			-command=> sub { 
 				my $answer = $choice eq 'f' ?
@@ -178,15 +193,16 @@ sub replace_dollar {
 					_ask_directory($window, 'Choose directory', 
 						-d $dollars{$key}->{value} ? $dollars{$key}->{value} : ''); 
 				_replace_text($en, $answer) if $answer;
-			} )->grid(-row => 1, -column => 1);
-		$tab->Radiobutton(
+			} 
+		)->grid(-row => $row, -column => 1);
+		$frm->Radiobutton(
 			-text => 'files',
 			-value => 'f',
-			-variable => \$choice)->grid(-row => 1, -column => 2);
-		$tab->Radiobutton(
+			-variable => \$choice)->grid(-row => $row, -column => 2);
+		$frm->Radiobutton(
 			-text => 'directories',
 			-value => 'd',
-			-variable => \$choice)->grid(-row => 1, -column => 3);
+			-variable => \$choice)->grid(-row => $row, -column => 3);
 	}
 show:
 	my $answer = $dlg->Show();
@@ -201,11 +217,11 @@ given (_value_or_else(0, _getenv('test'))) {
 		$window = _tkinit(1);
 		my $input = "find \${1:dir} -name \"\${GLOB}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
 #		say place_given($input);
-		say replace_dollar($input, [["No files", '']]);
+		say resolve_dollar($input, [["No files", '']]);
 	}
 	when (_gt 0) {
 		$window = _tkinit(1);
-		say replace_dollar("\${PATTERN}", [["No files", '']]);
+		say resolve_dollar("\${PATTERN}", [["No files", '']]);
 	}
 	default {
 		1

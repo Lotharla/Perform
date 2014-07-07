@@ -8,11 +8,11 @@ use Tk::MListbox;
 use Tk::DialogBox;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
-use lib dirname(dirname abs_path $0);
+use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
-	dump
-	_lt
-	_gt
+	dump pp
+	_lt	_gt _ne _eq
+	_blessed
 	_getenv 
 	_value_or_else 
 	_flip_hash 
@@ -21,6 +21,8 @@ use Manage::Utils qw(
 	_fileparse
 	_tkinit
 	_set_selection 
+	_text_info
+	$_entries
 );
 use Manage::PersistHash;
 use Exporter::Easy (
@@ -28,26 +30,26 @@ use Exporter::Easy (
 		@assoc_file_types
 		find_assoc
 		update_assoc
-		set_data
 		assoc_file_types
 		show_assoc
 		refill
 	)],
 );
-my ($obj, $window, %data);
+my ($window, %data);
 sub inject {
-	$obj = shift;
-	$window = $obj->{window};
-}
-sub set_data {	%data = @_	}
-sub assoc_ref {
-	%data = $obj->{data}->() if $obj;
-	return $data{'assoc'};
+	if (_blessed $_[0]) {
+		$window = $_[0]->{window};
+		%data = $_[0]->{data}->();
+	} else {
+		undef $window;
+		%data = @_;
+	}
+	$data{'assoc'} = {} if !exists($data{'assoc'});
 }
 sub update_assoc {
 	my $glob = shift;
 	my $alias = shift;
-	my $href = assoc_ref;
+	my $href = $data{'assoc'};
 	if ($alias) {
 		$href->{$glob} = $alias;
 	} else {
@@ -58,7 +60,7 @@ sub find_assoc {
 	my $glob = shift;
 	my(@parts) = _fileparse($glob);
 	$parts[1] = $parts[0] . $parts[2];
-	my %assoc = %{assoc_ref()};
+	my %assoc = %{$data{'assoc'}};
 	foreach (keys %assoc) {
 		if (_is_glob($_)) {
 			return $assoc{$_} if _glob_match $_, $parts[1];
@@ -68,7 +70,7 @@ sub find_assoc {
 }
 our @assoc_file_types;
 sub assoc_file_types {
-	my %assoc = %{assoc_ref()};
+	my %assoc = %{$data{'assoc'}};
 	if (%assoc and ! @assoc_file_types) {
 		my %flip = _flip_hash(\%assoc);
 		push(@assoc_file_types, [$_, $flip{$_}]) foreach (keys %flip);
@@ -112,7 +114,7 @@ show:
 			}
 		}
 		when ($btn_text->[1]) {
-			if (exists assoc_ref()->{$glob}) {
+			if (exists $data{'assoc'}->{$glob}) {
 				update_assoc $glob;
 				refill($mlb);
 				goto show;
@@ -123,18 +125,13 @@ show:
 sub refill {
 	my $mlb = shift;
 	$mlb->delete(0, 'end');
-	my %assoc = %{assoc_ref()};
+	my %assoc = %{$data{'assoc'}};
 	foreach my $glob (keys %assoc) {
 		$mlb->insert('end', [$glob, $assoc{$glob}])
 	}
 	undef @assoc_file_types;
 }
 given (_value_or_else(0, _getenv('test'))) {
-	when (_lt 0) {
-		my $file = dirname(dirname abs_path $0) . "/.entries";
-		tie %data, "PersistHash", $file;
-		dump assoc_file_types();
-	}
 	when (_gt 0) {
 		%data = (
 			assoc => {
@@ -153,6 +150,11 @@ given (_value_or_else(0, _getenv('test'))) {
 		);
 		$window = _tkinit(1);
 		show_assoc();
+		_text_info "file types", pp(assoc_file_types);
+	}
+	when (_lt 0) {
+		tie %data, "PersistHash", $_entries;
+		dump assoc_file_types();
 	}
 	default {
 		1

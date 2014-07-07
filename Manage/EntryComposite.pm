@@ -7,11 +7,12 @@ use Tk;
 use Tk::BrowseEntry;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path cwd);
-use lib dirname(dirname abs_path $0);
+use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
+	_gt _lt _eq _ne
 	_value_or_else
-	_indexOf
+	_index_of
 	_getenv
 	_now
 	_index_of
@@ -20,7 +21,9 @@ use Manage::Utils qw(
 	_set_selection
 	_message
 	_question
-	_popup_menu
+	_create_popup_menu
+	_install_menu
+	$_entries
 );
 use Manage::PersistHash;
 use Manage::Composite;
@@ -33,46 +36,16 @@ sub new {
 sub initialize {
 	my $self = shift;
     $self->SUPER::initialize();
-	my $mode = $self->mode;
-	if ($mode == 0) {
-		$self->{widget} = $self->{window}->LabEntry(
-			-label => $self->{label}, -labelPack => [ -side => "left" ],
-			-width => $self->{width},
-			-takefocus => 1,
-			-textvariable => \$self->{item});
-		$self->{entry} = $self->{widget}->Subwidget("entry");
+	($self->{mode}, $self->{listmode}) = $self->mode($self->{listmode});
+	$self->top($self->{listmode});
+	$self->{window}->bind('<KeyPress-Up>', sub {$self->move_entry(-1)});
+	$self->{window}->bind('<KeyPress-Down>', sub {$self->move_entry(+1)});
+	if ($self->use_history) {
+		$self->{window}->bind('<Control-KeyPress-Down>', sub {$self->move_point_in_time(+1)});
+		$self->{window}->bind('<Control-KeyPress-Up>', sub {$self->move_point_in_time(-1)});
+		$self->history_menu;
 	} else {
-		my $top = $self->{window}->Frame->pack(-side => 'top', -fill=>'x', -expand=>1);
-		$top->Label(-text => $self->{label})->pack(-side => "left");
-		$self->{widget} = $top->BrowseEntry(
-			-width => $self->{width},
-			-takefocus => 1,
-			-variable => \$self->{item});
-		$self->{listbox} = $self->{widget}->Subwidget('slistbox')->Subwidget('scrolled');
-		$self->{entry} = $self->{widget}->Subwidget("entry")->Subwidget("entry");
-		$self->{arrow} = $self->{widget}->Subwidget("arrow");
-		$self->populate($mode);
-		$self->{listbox}->bind('<<ListboxSelect>>' => sub{ $self->change_history }) if $mode > 1;
-	}
-	$self->{widget}->pack(-fill=>'x', -expand=>1);
-	$self->{window}->bind('<KeyPress-Return>', sub {$self->commit()});
-	$self->{window}->bind('<Control-KeyPress-Up>', sub {$self->move_entry(-1)});
-	$self->{window}->bind('<Control-KeyPress-Down>', sub {$self->move_entry(+1)});
-	if ($mode > 0) {
-		$self->{window}->bind('<KeyPress-Down>', sub {$self->move_point_in_time(+1)});
-		$self->{window}->bind('<KeyPress-Up>', sub {$self->move_point_in_time(-1)});
-		$self->{popup} = _popup_menu($self->{window}, 
-			sub {
-				my $differs = $self->new_entry($self->item);
-				my $hasNoPoint = $self->{point} < 0;
-				$self->{popup}->entryconfigure(0, -state => $differs ? 'normal' : 'disabled');
-				$self->{popup}->entryconfigure(1, -state => $differs || $hasNoPoint ? 'disabled' : 'normal');
-				$self->{popup}->entryconfigure(2, -state => $hasNoPoint || !$differs ? 'disabled' : 'normal');
-			}, 
-			'add', sub{ $self->change_history('add') }, 
-			'remove', sub{ $self->change_history('remove') }, 
-			'update', sub{ $self->change_history('update') }
-		) if $mode > 1;
+		$self->options_menu;
 	}
 	$self->bottom;
 	$self->{entry}->configure(
@@ -80,6 +53,55 @@ sub initialize {
 	);
 	_center_window($self->{window});
 	_set_selection($self->{entry});
+}
+sub top {
+	my $self = shift;
+	my $listmode = shift;
+	$self->{top} = $self->{window}->Frame->pack(-side => 'top', -fill=>'x', -expand=>1);
+	if ($listmode == 0) {
+		my $widget = $self->{top}->LabEntry(
+			-label => $self->{label}, -labelPack => [ -side => "left" ],
+			-width => $self->{width},
+			-takefocus => 1,
+			-textvariable => \$self->{item}
+		)->pack(-fill=>'x', -expand=>1);
+		$self->{entry} = $widget->Subwidget("entry");
+		$self->{listbox} = undef;
+	} else {
+		$self->{top}->Label(-text => $self->{label})->pack(-side => "left");
+		if ($listmode > 0) {
+			my $widget = $self->{top}->Frame()->pack(-side => 'top', -fill=>'x', -expand=>1);
+			$self->{entry} = $widget->Entry(
+				-width =>  $self->{width},
+				-takefocus => 1,
+				-textvariable => \$self->{item}
+			)->pack(-side => 'top', -fill=>'x', -expand=>1);
+			$self->{listbox} = $widget->Scrolled("Listbox", 
+				-height => $self->{height},
+				-selectmode => 'multiple', 
+				-scrollbars => 'osoe'
+			)->pack(-side => 'bottom', -fill=>'both', -expand=>1);
+		} else {
+			my $widget = $self->{top}->BrowseEntry(
+				-width => $self->{width},
+				-takefocus => 1,
+				-variable => \$self->{item}
+			)->pack(-fill=>'x', -expand=>1);
+			$self->{listbox} = $widget->Subwidget('slistbox')->Subwidget('scrolled');
+			$self->{entry} = $widget->Subwidget("entry")->Subwidget("entry");
+			$self->{arrow} = $widget->Subwidget("arrow");
+		}
+	}
+	$self->populate($self->{mode});
+	if ($self->{listbox}) {
+		$self->{listbox}->bind('<<ListboxSelect>>' => sub { 
+			$self->item($self->selected) if $self->permanent_list;
+			$self->change_history if $self->use_history;
+		});
+	}
+	$self->{entry}->bind('<Any-KeyPress>', sub {
+#		$self->{listbox}->selectionClear(0,'end') if $self->permanent_list;
+	});
 }
 sub bottom {
 	my $self = shift;
@@ -95,12 +117,63 @@ sub bottom {
 	$self->{window}->bind('<Alt-Return>', sub { $self->{modifier} = 'Alt'; $buttons{'ok'}->invoke });
 	$self->{window}->bind('<Control-Return>', sub { $self->{modifier} = 'Control'; $buttons{'ok'}->invoke });
 }
+sub use_history {
+	$_[0]->{mode} > 1
+}
+sub history_menu {
+	my $self = shift;
+	my $menu = shift;
+	my $popup = !defined($menu);
+	$menu = _install_menu(
+		$popup ? $self->{window} : $menu, 
+		sub {
+			my $differs = $self->new_entry($self->item);
+			my $hasNoPoint = $self->{point} < 0;
+			$menu->entryconfigure(0, -state => $differs ? 'normal' : 'disabled');
+			$menu->entryconfigure(1, -state => $differs || $hasNoPoint ? 'disabled' : 'normal');
+			$menu->entryconfigure(2, -state => $hasNoPoint || !$differs ? 'disabled' : 'normal');
+		}, 
+		'add to history', sub{ $self->change_history('add') }, 
+		'remove from history', sub{ $self->change_history('remove') }, 
+		'update history', sub{ $self->change_history('update') },
+		$popup ? undef : 'History'
+	);
+	$self->options_menu($menu);
+}
+sub permanent_list {
+	$_[0]->{listmode} > 0
+}
+sub options_menu {
+	my $self = shift;
+	my $menu = shift;
+	return if ! $self->{listmode};
+	my $popup = !defined($menu);
+	$menu->add('separator') if ! $popup;
+	$menu = _install_menu(
+		$popup ? $self->{window} : $menu, 
+		sub {
+			$menu->entryconfigure(0, -state => 'normal');
+		}, 
+		$popup ? undef : 'Options'
+	);
+	if ($self->{listmode} != 0) {
+		$menu->add('checkbutton', 
+			-label => 'permanent list', 
+			-onvalue => 1, -offvalue => -1, 
+			-variable => \$self->{listmode},
+			-command => sub {
+				$self->{relaunch} = 1;
+				$self->cancel;
+			}
+		);
+	}
+}
 sub item { $_[0]->{item}=$_[1] if defined $_[1]; $_[0]->{item} }
 sub give {
 	my $self = shift;
 	my $item = shift;
 	$self->item($item);
-	$self->set_point_in_time($item) if $self->mode > 1;
+	$self->set_point_in_time($item) if $self->use_history;
 }
 sub data {
 	my $self = shift;
@@ -114,6 +187,7 @@ sub data {
 sub populate {
 	my $self = shift;
     my $mode = shift;
+    return if ! $mode;
 	tie my @items,'Tk::Listbox', $self->{listbox};
 	$self->{items} = sub {
 		@items = @{$_[0]} if defined $_[0];
@@ -152,16 +226,18 @@ sub selected {
     my $self = shift;
 	my $sel = $self->{listbox}->curselection;
     return undef if ! $sel;
-	my $i = pop($sel);
+    my @sel = sort {$a<=>$b} @{$sel};
+	$sel = shift(@sel);
+    return undef if ! defined($sel);
 	my @items = $self->{items}->();
-	$items[$i];
+	$items[$sel];
 }
 sub update_list {
 	my $self = shift;
 	my $i = _index_of($self->item(), $self->{items}->());
 	if ($i > -1) {
 		my $sel = $self->{listbox}->curselection;
-		$self->{listbox}->selectionClear(pop $sel) if $sel;
+		$self->{listbox}->selectionClear(0,'end') if $sel;
 		$self->{listbox}->selectionSet($i);
 		$self->{listbox}->see($i)
 	}
@@ -169,11 +245,12 @@ sub update_list {
 sub move_entry {
     my $self = shift;
 	my $direct = shift;
+	return if ! $self->{items};
 	my @items = $self->{items}->();
-    my $ptr = _indexOf(_value_or_else('', $self->item), \@items);
+    my $ptr = _index_of(_value_or_else('', $self->item), @items);
 	$ptr += $direct;
     $ptr++ if $ptr < -1;
-	$ptr %= scalar(@items);
+	$ptr %= @items;
 	$self->item($items[$ptr]);
 	$self->update_list();
 }
@@ -182,17 +259,27 @@ sub timeline {
 	my %history = $self->history;
 	return sort {$a <=> $b} keys %history
 }
-sub get_point_in_time {
+sub get_pointer_on_timeline {
     my $self = shift;
 	my $item = shift;
-	my %history = $self->history;
-	my @timeline = $self->timeline;
-	my $ptr = 0;
-	foreach (@timeline) {
-		last if $item && $history{$_} eq $item;
-		$ptr++;
+	if ($item) {
+		my %history = $self->history;
+		my $ptr = 0;
+		foreach (@_) {
+			my $it = $history{$_};
+			return $ptr if $it eq $item;
+			$ptr++;
+		}
 	}
-	$ptr < scalar(@timeline) ? $timeline[$ptr] : -1
+	-1
+}
+sub get_point_in_time {
+    my $self = shift;
+	my @timeline = $self->timeline;
+	my $ptr = $self->get_pointer_on_timeline(shift, @timeline);
+	$ptr > -1 ? 
+		$timeline[$ptr] : 
+		-1
 }
 sub set_point_in_time {
     my $self = shift;
@@ -206,16 +293,16 @@ sub move_point_in_time {
     my $self = shift;
 	my $direct = shift;
 	my %history = $self->history;
-	my @timeline = $self->timeline;
 	if (%history) {
-		my $ptr = $self->{point} < 0 ? scalar(@timeline) :_indexOf($self->{point}, \@timeline);
+		my @timeline = $self->timeline;
+		my $ptr = $self->{point} < 0 ? @timeline : _index_of($self->{point}, @timeline);
 		my $bottom = 0;
 		if ($ptr < $bottom) {
 			$ptr = $#timeline - ($direct < 0 ? $direct : 0)
 		}
 		$ptr -= $bottom;
 		$ptr += $direct;
-		$ptr %= scalar(@timeline) - $bottom;
+		$ptr %= @timeline - $bottom;
 		$ptr += $bottom;
 		$self->{point} = $timeline[$ptr];
 		$self->item($history{$self->{point}});
@@ -229,11 +316,21 @@ sub change_history {
 	my $confirm = shift;
 	given ($oper) {
 		when ('remove') {
-			my $message = sprintf("Are you sure about removing\n'%s'", $self->item);
+			my @sel = @{$self->{listbox}->curselection};
+			my $message = sprintf("Are you sure about removing\n'%s'", 
+				(@sel > 1 ? @sel . " items" : $self->item));
 			if ( $confirm || _question($self->{window}, $message, "Update entry") eq 'yes' ) {
-				my $point = $self->get_point_in_time($self->item);
-				$self->history($point, '');
-				$self->item('');
+    			if (@sel > 1) {
+					my @items = $self->{items}->();
+					foreach (@sel) {
+						my $point = $self->get_point_in_time($items[$_]);
+						$self->history($point, '');
+					}
+    			} else {
+					my $point = $self->get_point_in_time($self->item);
+					$self->history($point, '');
+					$self->item('');
+    			}
 				$self->{point} = -1;
 			}
 		}
@@ -257,37 +354,41 @@ sub change_history {
 		}
 	}
 }
-sub historize {
-	my $self = shift;
-	my $item = shift;
-	if ($self->mode > 1 && $item) {
-	    $self->change_history('add', $item);
-	}
-}
 sub commit {
 	my $self = shift;
-	$self->historize($self->item);
-	my $output = _value_or_else '', $self->item;
+	my $item = $self->item;
+	if ($self->use_history && $item) {
+	    $self->change_history('add', $item);
+	}
+	my $output = _value_or_else '', $item;
 	print $output;
     $self->SUPER::commit();
 }
-given (_value_or_else(0, _getenv('test'))) {
-	no warnings 'numeric';
-	when ($_ > 2) {
-		my $file = dirname(dirname abs_path $0) . '/.entries';
-		my $ec = new EntryComposite('file', $file, 'label', '<<--History-->>');
-		MainLoop();
+given (_value_or_else('', _getenv('test'))) {
+	when (_lt -1) {
+		my $ec = new EntryComposite('file', $_entries, 'label', '<<--History-->>', 'listmode', '-1');
+		relaunch $ec;
 	}
-	when ($_ > 1) {
+	when (_gt 1) {
+		my $ec = new EntryComposite('file', $_entries, 'label', '<<--History-->>');
+		relaunch $ec;
+	}
+	when (_gt 0) {
 		my @paths = sort split( /:/, $ENV{PATH});
-		my $ec = new EntryComposite('title', 'Environment', 'label', 'Path', 'params', \@paths);
+		my $ec = new EntryComposite('title', 'Environment', 'label', 'path', 'params', \@paths);
 		$ec->give(cwd());
-		MainLoop();
+		relaunch $ec;
 	}
-	when ($_ > 0) {
+	when (_lt 0) {
+		my @paths = sort split( /:/, $ENV{PATH});
+		my $ec = new EntryComposite('title', 'Environment', 'label', 'path', 'params', \@paths, 'listmode', '-1');
+		$ec->give(cwd());
+		relaunch $ec;
+	}
+	when (_eq 0) {
 		my $ec = new EntryComposite('title', 'Environment', 'label', 'Current');
 		$ec->give(cwd());
-		MainLoop();
+		relaunch $ec;
 	}
 	default {
 		1
