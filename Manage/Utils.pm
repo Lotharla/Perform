@@ -7,6 +7,7 @@ use feature qw(say switch);
 use Scalar::Util qw(looks_like_number);
 use Cwd qw(abs_path);
 use File::Basename qw(dirname basename fileparse);
+use File::Spec::Functions qw(catfile catdir tmpdir);
 use File::Temp;
 use Data::Dump qw(dump pp);
 use XML::XML2JSON;
@@ -15,8 +16,12 @@ use Tk;
 
 use Exporter::Easy (
 	OK => [ qw(
-		dump pp
+		dump 
+		pp
 		looks_like_number
+		tmpdir
+		catfile
+		catdir
 		_max
 		_min
 		_gt
@@ -55,7 +60,6 @@ use Exporter::Easy (
 		_implicit
 		_iterate_sorted_values
 		_fileparse
-		_pathcombine
 		_files_in_dir
 		_is_glob
 		_glob_match
@@ -68,6 +72,8 @@ use Exporter::Easy (
 		_diagnostic
 		_tempFilename
 		_transientFile
+		_clipdir
+		_call
 		_capture_output
 		_check_output
 		_binsearch_alpha
@@ -90,6 +96,7 @@ use Exporter::Easy (
 		_menu
 		_create_popup_menu
 		_install_menu
+		_install_menu_button
 		_win32
 		$_entries
 	)],
@@ -156,8 +163,8 @@ sub _split_on_whitespace {
 	split(/$_whitespace/, $str, $limit)
 }
 
-sub _array { ref($_[0]) eq 'ARRAY' ? @{$_[0]} : () }
-sub _hash { ref($_[0]) eq 'HASH' ? %{$_[0]} : () }
+sub _array { ref($_[0]) eq 'ARRAY' ? @{$_[0]} : ($_[1] ? $_[1] : ()) }
+sub _hash { ref($_[0]) eq 'HASH' ? %{$_[0]} : ($_[1] ? $_[1] : ()) }
 
 sub _blessed { ref($_[0]) && UNIVERSAL::can($_[0],'can') }
 sub _is_type_of { _blessed($_[1]) && $_[1]->isa($_[0]) }
@@ -369,7 +376,7 @@ sub _persist {
 }
 
 sub _implicit {
-	my $file = _make_sure_file(_pathcombine(dirname(__FILE__), ".implicit"));
+	my $file = _make_sure_file(catfile(dirname(__FILE__), ".implicit"));
 	my %implicits = _hash(_persist $file);
 	return %implicits if ! @_;
 	return $implicits{$_[-1]} if @_ % 2;
@@ -395,23 +402,16 @@ sub _fileparse {
 	fileparse(shift, qr/\.[^.]*/);
 }
 
-sub _pathcombine {
-	use File::Spec::Functions qw(catfile);
-	catfile @_
-}
-
 sub _files_in_dir {
 	my $dir = shift;
-	my $full = shift;
+	my $fullpath = shift;
+	return () if ! _dir_exists($dir);
 	opendir(DIR, $dir) || die "Can't open directory : $!\n";
 	my @list = grep ! /^\.\.?$/, readdir(DIR);
-	if ($full) {
-		for (my $i = 0; $i < @list; $i++) {
-			$list[$i] = _pathcombine($dir, $list[$i]);
-		}
-	}
 	closedir(DIR);
-	return @list;
+	$fullpath ?
+		map { catfile $dir, $_ } @list :
+		@list;
 }
 
 sub _is_glob {
@@ -490,10 +490,11 @@ sub _extract_from {
 
 sub _diagnostic {
 	my $msg = shift;
-	my $diag = "/tmp/diag";
+	my $diag = catdir tmpdir, "diag";
 	mkdir $diag unless -d $diag;
 	$diag = new File::Temp( DIR => $diag, UNLINK => 0 );
 	_contents_to_file [$diag,'encoding(UTF-8)'], $msg;
+	$diag
 }
 
 sub _tempFilename {
@@ -509,6 +510,26 @@ sub _transientFile {
 	return new File::Temp( UNLINK => 1 );
 }
 
+sub _clipdir {
+	my $dir = catdir tmpdir, "clip";
+	mkdir $dir if ! -d $dir;
+	$dir
+}
+
+sub _call {
+	my $func = shift;
+	given (ref $func) {
+		when ('CODE') {
+			$func->(@_);
+		}
+		when ('ARRAY') {
+			my @array = @$func;
+			$func = shift(@array);
+			_call($func, @array, @_);
+		}
+	}
+}
+
 sub _capture_output {
 	my $func = shift;
 	my $name = shift;
@@ -519,16 +540,7 @@ sub _capture_output {
 	}
 	open $file, '>:encoding(UTF-8)', "$name" || die "Can't open file : $!\n";
 	select($file);
-	given (ref $func) {
-		when ('CODE') {
-			$func->(@_);
-		}
-		when ('ARRAY') {
-			my @array = @$func;
-			$func = shift(@array);
-			$func->(@array);
-		}
-	}
+	_call $func;
 	select(STDOUT);
 	close $file;
 	return _contents_of_file($name);
@@ -794,6 +806,31 @@ sub _install_menu {
 		$menu->add('command', -label => $label, -command => $command);
 	}
 	$menu
+}
+
+sub _install_menu_button {
+	my $win = shift;
+	my $title = shift;
+	my $func = shift;
+	my $btn = $win->Menubutton( 
+		-text => $title, 
+		-tearoff => 0,
+	);
+	if (@_) {
+		my $menu = $btn->cget('-menu');
+		foreach my $item (@_) {
+			$menu->command(-label => $item, 
+				-command => sub{
+					_call [$func, $item]
+				}
+			)
+		}
+	} else {
+		use Tk::Balloon;
+		my $ba = $win->Balloon(-background=>'yellow');
+		$ba->attach($btn,-initwait => 0,-balloonmsg => sprintf "no %s items", $title);
+	}
+	$btn
 }
 
 our $_entries = dirname(dirname  __FILE__) . "/.entries";

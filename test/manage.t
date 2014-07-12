@@ -12,6 +12,9 @@ use lib dirname(dirname abs_path $0);
 use Manage::PersistHash;
 use Manage::Utils qw(
 	dump pp
+	catfile
+	catdir
+	tmpdir
 	$_whitespace 
 	_has_whitespace 
 	_split_on_whitespace 
@@ -33,6 +36,7 @@ use Manage::Utils qw(
 	_transientFile 
 	_file_types 
 	_contents_of_file
+	_make_sure_file
 	_tkinit 
 	_ask_file
 	_message 
@@ -43,6 +47,10 @@ use Manage::Utils qw(
 	_rndstr
 	_index_of
 	$_entries
+	_diagnostic
+	_call
+	_array
+	_hash
 );
 use Manage::Resolver qw(
 	isDollar hasDollar dollar_amount make_dollar 
@@ -306,8 +314,32 @@ ok $file !~ /\$\{([^\}]+)\}/, $file;
 $_ = _rndstr 8, @_;
 is length $_, 8;
 ok _index_of($_, @_) > -1 for split '', $_;
-say pp _files_in_dir "/tmp";
-#system("ls /tmp");
+$file = _diagnostic "";
+ok _make_sure_file $file;
+unlink $file;
+$dir = catdir tmpdir, "clip";
+my $name = "_1000";
+$file = catfile $dir, $name;
+_make_sure_file $file;
+my @files = _files_in_dir($dir);
+ok _index_of($name,@files) > -1;
+unlink $file;
+ok ! _file_exists $file;
+ok _dir_exists $dir;
+@parts = _array \@files;
+is_deeply \@parts, \@files;
+$_ = _array undef, \@files;
+is_deeply $_, \@files;
+sub _dump { 
+#	dump(@_);
+	@_
+}
+my $p = \&_dump;
+is _call([$p, @files]), @files;
+$p = [$p, @files];
+is _call([$p, @files]), 2 * @files;
+$p = [$p, @files];
+is _call([$p, @files]), 3 * @files;
 =pod
 =cut
 exit;

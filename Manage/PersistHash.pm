@@ -6,8 +6,8 @@ use File::Basename qw(dirname);
 use Cwd qw(abs_path cwd);
 use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
-	dump pp
 	_blessed
+	_persist
 );
 our @ISA = qw(Tie::StdHash);
 sub TIEHASH {
@@ -21,12 +21,7 @@ sub fetch {
 	my $self = shift;
 	my $file = shift;
 	if ($file && -f $file) {
-		open my $in, '<:encoding(UTF-8)', $file or die "Can't open file \"$file\" : $!\n";
-		{
-			local $/;    # slurp mode
-			$self = eval <$in>;
-		}
-		close $in;
+		$self = _persist $file;
 	}
 	return $self;
 }
@@ -34,10 +29,8 @@ sub store {
 	my $self = shift;
 	my $file = shift;
 	if ($file && -f $file) {
-		open my $out, '>:encoding(UTF-8)', $file or die "Can't open file \"$file\" : $!\n";
 		my $blessed = _blessed($self);
-		print {$out} dump($blessed ? { %$self } : $self);
-		close $out;
+		_persist $file, $blessed ? { %$self } : $self;
 	}
 }
 sub DESTROY {

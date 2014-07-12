@@ -5,7 +5,6 @@ no warnings 'experimental';
 use Scalar::Util qw(looks_like_number);
 use Tie::IxHash;
 use Tk;
-use Tk::Balloon;
 use Tk::DialogBox;
 use Tk::NoteBook;
 use feature qw(say switch);
@@ -14,6 +13,7 @@ use Cwd qw(abs_path);
 use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
+	catfile
 	_gt _lt
 	_combine
 	_getenv 
@@ -27,6 +27,9 @@ use Manage::Utils qw(
 	_file_types 
 	_ask_file 
 	_ask_directory
+	_install_menu_button
+	_clipdir
+	_files_in_dir
 );
 use Exporter::Easy (
 	OK => [ qw(
@@ -38,6 +41,7 @@ use Exporter::Easy (
 		isDollar
 		dollar_amount
 		make_dollar
+		make_value
 		detect_dollar
 		get_dollars
 		set_dollars
@@ -118,7 +122,7 @@ sub get_dollars {
 				$x = make_value $amount, $given[$x - 1];
 			}
 			default {
-				$x = make_dollar($amount);
+				$x = make_dollar $amount;
 			}
 		}
 		$dollars{$key}->{value} = $x;
@@ -160,29 +164,27 @@ sub resolve_dollar {
 	my $book = $dlg->NoteBook()->pack( -fill=>'both', -expand=>1 );
 	for my $key (keys %dollars) {
 		my $en;
-		my $tab = $book->add( $dollars{$key}->{value}, -label=>$key, -raisecmd=>sub{_set_selection($en)} );
+		my $tab = $book->add( $dollars{$key}->{value}, 
+			-label => $key, 
+			-raisecmd => sub{_set_selection($en)}
+		);
 		$en = $tab->Entry(
 			-width => _value_or_else(75, $width),
 			-textvariable => \$dollars{$key}->{value}
 		)->pack(-side => 'top', -fill=>'x', -expand=>1);
 		my $frm = $tab->Frame()->pack(-side => 'bottom', -fill=>'x', -expand=>1);
-		my $row = 0;
-		my $btn = $frm->Menubutton( 
-			-text => 'given', 
-			-tearoff => 0,
-		)->grid(-row => $row, -column => 0);
-		my $menu = $btn->cget('-menu');
-		foreach my $gift (@given) {
-			$menu->command(-label => $gift, 
-				-command => sub{
-					_replace_text($en, $gift, 1)
-				}
-			);
-		}
-		if (! @given) {
-			my $ba = $window->Balloon(-background=>'yellow');
-			$ba->attach($btn,-initwait => 0,-balloonmsg => "no given items");
-		}
+		my ($row,$col) = (0,0);
+		my $btn = _install_menu_button $frm, 'given', sub{_replace_text($en, $_[0], 1)}, @given;
+		$btn->grid(-row => $row, -column => $col++);
+		my $dir = _clipdir;
+		my @files = _files_in_dir($dir);
+		$btn = _install_menu_button($frm, 'clips', 
+			sub {
+				my $repl = catfile $dir, $_[0];
+				_replace_text($en, $repl, 1)
+			}, 
+			@files);
+		$btn->grid(-row => $row, -column => $col++);
 		my $choice = 'f';
 		$frm->Button( 
 			-text=>'Browse...', 
@@ -194,15 +196,15 @@ sub resolve_dollar {
 						-d $dollars{$key}->{value} ? $dollars{$key}->{value} : ''); 
 				_replace_text($en, $answer) if $answer;
 			} 
-		)->grid(-row => $row, -column => 1);
+		)->grid(-row => $row, -column => $col++);
 		$frm->Radiobutton(
 			-text => 'files',
 			-value => 'f',
-			-variable => \$choice)->grid(-row => $row, -column => 2);
+			-variable => \$choice)->grid(-row => $row, -column => $col++);
 		$frm->Radiobutton(
 			-text => 'directories',
 			-value => 'd',
-			-variable => \$choice)->grid(-row => $row, -column => 3);
+			-variable => \$choice)->grid(-row => $row, -column => $col++);
 	}
 show:
 	my $answer = $dlg->Show();
