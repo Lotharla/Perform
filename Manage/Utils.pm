@@ -72,7 +72,6 @@ use Exporter::Easy (
 		_diagnostic
 		_tempFilename
 		_transientFile
-		_clipdir
 		_call
 		_capture_output
 		_check_output
@@ -95,7 +94,9 @@ use Exporter::Easy (
 		_ask_directory
 		_menu
 		_create_popup_menu
+		_delete_popup_menu
 		_install_menu
+		_refresh_menu_button_items
 		_install_menu_button
 		_win32
 		$_entries
@@ -163,12 +164,11 @@ sub _split_on_whitespace {
 	split(/$_whitespace/, $str, $limit)
 }
 
-sub _array { ref($_[0]) eq 'ARRAY' ? @{$_[0]} : ($_[1] ? $_[1] : ()) }
-sub _hash { ref($_[0]) eq 'HASH' ? %{$_[0]} : ($_[1] ? $_[1] : ()) }
+sub _array { ref($_[0]) eq 'ARRAY' ? @{$_[0]} : () }
+sub _hash { ref($_[0]) eq 'HASH' ? %{$_[0]} : () }
 
 sub _blessed { ref($_[0]) && UNIVERSAL::can($_[0],'can') }
 sub _is_type_of { _blessed($_[1]) && $_[1]->isa($_[0]) }
-
 sub _is_value { $_[0] || length($_[0]) }
 
 sub _value_or_else {
@@ -232,7 +232,9 @@ sub _now {
 }
 
 sub _rndstr { 
-	join '', @_[ map { rand @_ } 1 .. shift ]
+	my $len = _value_or_else 8, shift;
+	@_ = ('a'..'z', 0..9) if ! @_;
+	join '', @_[ map { rand @_ } 1 .. $len ]
 }
 
 sub _index_of {
@@ -362,7 +364,6 @@ sub _persist {
 		open my $out, '>:encoding(UTF-8)', $file or die "Can't open file \"$file\" : $!\n";
 		print {$out} dump $ref;
 		close $out;
-#_diagnostic(pp(%{$ref}));
 	} else {
 		open my $in, '<:encoding(UTF-8)', $file or die "Can't open file \"$file\" : $!\n";
 		{
@@ -370,9 +371,8 @@ sub _persist {
 			$ref = eval <$in>;
 		}
 		close $in;
-#dump $ref;
-		return $ref;
 	}
+	return $ref;
 }
 
 sub _implicit {
@@ -508,12 +508,6 @@ sub _tempFilename {
 sub _transientFile {
 #	return "/tmp/test";
 	return new File::Temp( UNLINK => 1 );
-}
-
-sub _clipdir {
-	my $dir = catdir tmpdir, "clip";
-	mkdir $dir if ! -d $dir;
-	$dir
 }
 
 sub _call {
@@ -787,6 +781,14 @@ sub _create_popup_menu {
 	$menu;
 }
 
+sub _delete_popup_menu {
+	my $win = shift;
+	my $menu = shift;
+	$win->bind('<3>', sub{});
+	$win->bind('<1>', sub{});
+	$menu->destroy
+}
+
 sub _install_menu {
 	my $obj = shift;
 	my $postcommand = shift;
@@ -808,20 +810,19 @@ sub _install_menu {
 	$menu
 }
 
-sub _install_menu_button {
+sub _refresh_menu_button_items {
 	my $win = shift;
 	my $title = shift;
-	my $func = shift;
-	my $btn = $win->Menubutton( 
-		-text => $title, 
-		-tearoff => 0,
-	);
-	if (@_) {
+	my $btn = shift;
+	my $command = shift;
+	my @items = @_;
+	if (@items) {
 		my $menu = $btn->cget('-menu');
-		foreach my $item (@_) {
+		$menu->delete(0, 'end');
+		foreach my $item (@items) {
 			$menu->command(-label => $item, 
 				-command => sub{
-					_call [$func, $item]
+					_call [$command, $item]
 				}
 			)
 		}
@@ -830,9 +831,26 @@ sub _install_menu_button {
 		my $ba = $win->Balloon(-background=>'yellow');
 		$ba->attach($btn,-initwait => 0,-balloonmsg => sprintf "no %s items", $title);
 	}
+}
+
+sub _install_menu_button {
+	my $win = shift;
+	my $title = shift;
+	my $postcommand = shift;
+	my $command = shift;
+	my @items = @_;
+	my $btn;
+	$btn = $win->Menubutton( 
+		-text => $title, 
+		-tearoff => 0,
+	);
+	$btn->menu->configure(
+		-postcommand => $postcommand
+	);
+	_refresh_menu_button_items $win, $title, $btn, $command, @items;
 	$btn
 }
 
-our $_entries = dirname(dirname  __FILE__) . "/.entries";
+our $_entries = catfile dirname(dirname  __FILE__), ".entries";
 1;
 

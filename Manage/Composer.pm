@@ -10,7 +10,7 @@ use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
 	_chomp
-	_combine
+	_is_value
 	_value_or_else 
 	_getenv
 	_set_selection
@@ -18,7 +18,7 @@ use Manage::Utils qw(
 	_install_menu
 );
 use Manage::Resolver qw(
-	hasDollar
+	has_dollar
 	@given 
 	place_given
 	resolve_dollar
@@ -56,11 +56,11 @@ sub initialize {
 	});
 	$submenu = _install_menu($menu, 
 		sub {
-			my $possible = hasDollar($self->item);
+			my $possible = has_dollar($self->item);
 			$submenu->entryconfigure(0, -state => $possible ? 'normal' : 'disabled');
 			$submenu->entryconfigure(1, -state => $possible ? 'normal' : 'disabled');
 		}, 
-		"Resolve '\$...'", sub{$self->prepare_output}, 
+		"Resolve '\$...'", sub{$self->pre_commit}, 
 		'Place given', sub {
 			$self->item(place_given($self->item));
 			_set_selection($self->{entry});
@@ -106,7 +106,6 @@ sub populate {
 		Manage::Assoc::inject($self);
 		Manage::Resolver::inject($self);
 	}
-	@given = _getenv('given');
 	$self->pre_select($given[0]);
 }
 sub save {
@@ -118,9 +117,9 @@ sub save {
 }
 sub pre_select {
 	my $self = shift;
-	my $entry = shift;
-	if (length($entry) > 0 && !hasDollar($entry)) {
-		my $found = find_assoc($entry);
+	my $expr = shift;
+	if (_is_value($expr) && !has_dollar($expr)) {
+		my $found = find_assoc($expr);
 		if ($found) {
 			$found = resolve_alias($found);
 			if ($found) {
@@ -130,19 +129,19 @@ sub pre_select {
 		}
 	}
 }
-sub prepare_output {
+sub pre_commit {
 	my $self = shift;
 	my $output = $self->item;
-	if (hasDollar($output)) {
+	if (has_dollar($output)) {
 		$output = resolve_dollar($output, assoc_file_types(), @_);
-		return 0 if not $output;
+		return 0 if ! $output;
 	}
 	$self->item($output);
 	1
 }
 sub commit {
 	my $self = shift;
-	if (not $self->prepare_output) {
+	if (not $self->pre_commit) {
 		return
 	}
 	$self->SUPER::commit();

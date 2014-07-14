@@ -53,7 +53,7 @@ use Manage::Utils qw(
 	_hash
 );
 use Manage::Resolver qw(
-	isDollar hasDollar dollar_amount make_dollar 
+	is_dollar has_dollar dollar_amount make_dollar 
 	get_dollars set_dollars detect_dollar 
 	@given 
 	given_title
@@ -106,12 +106,12 @@ is @parts, 4;
 my %samples = ( 11 => "\$11", '2:dir' => "\${2:dir}", "D'oh" => "\${D'oh}", $didnt => "\${$didnt}", );
 is make_dollar($_), $samples{$_}, _surround(['_','_'],$_) foreach keys %samples;
 foreach (values %samples) { 
-	ok(hasDollar($_) && isDollar($_), $_) if !_has_whitespace($_) and index($_, "'") < 0 
+	ok(has_dollar($_) && is_dollar($_), $_) if !_has_whitespace($_) and index($_, "'") < 0 
 };
-ok hasDollar($_) && !isDollar($_) && dollar_amount($_)==1 for '$1x1';
-ok !hasDollar($_) && !isDollar($_) && !defined(dollar_amount($_)) for '$x11';
-ok hasDollar($_) && !isDollar($_) && dollar_amount($_) eq 'x' for '${x}11';
-ok hasDollar($_) && isDollar($_) && dollar_amount($_) eq 'x11' for '${x11}';
+ok has_dollar($_) && !is_dollar($_) && dollar_amount($_)==1 for '$1x1';
+ok !has_dollar($_) && !is_dollar($_) && !defined(dollar_amount($_)) for '$x11';
+ok has_dollar($_) && !is_dollar($_) && dollar_amount($_) eq 'x' for '${x}11';
+ok has_dollar($_) && is_dollar($_) && dollar_amount($_) eq 'x11' for '${x11}';
 my %assoc = (
 	".pl" => "perl",
 	".t" => "perl",
@@ -166,10 +166,10 @@ is place_given("\$1"), "I";
 is place_given("\$0") =~ s/\t/ /gr, $didnt;
 my $pattern = "find \$4 -name \"\${FILES}\" -print | xargs grep \"\$2\" 2>/dev/null";
 is place_given($pattern), 
-	"find it -name \"\${FILES}\" -print | xargs grep \"didn't\" 2>/dev/null";
+	"find it -name \"\" -print | xargs grep \"didn't\" 2>/dev/null";
 push @given, '';
 is place_given(_combine($pattern, "\$5")), 
-	"find it -name \"\${FILES}\" -print | xargs grep \"didn't\" 2>/dev/null\t";
+	"find it -name \"\" -print | xargs grep \"didn't\" 2>/dev/null\t";
 my $term = `gconftool-2 -g /desktop/gnome/applications/terminal/exec`;
 isnt $term, "gnome-terminal";
 is _chomp($term), "gnome-terminal";
@@ -184,7 +184,7 @@ push @given, $dir, "**/*.*";
 $pattern = "find \${1:dir} -name \"\$2\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
 $dir = dirname $dir;
 is place_given($pattern), 
-	"find $dir -name \"**/*.*\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
+	"find $dir -name \"**/*.*\" -print | xargs grep -e \"\" 2>/dev/null";
 ok -d dirname(dirname abs_path $0);
 $file = $_entries;
 ok -f $file;
@@ -311,7 +311,7 @@ for my $match (@matches) {
 }
 ok $file !~ /\$\{([^\}]+)\}/, $file;
 @_ = ('a'..'z', 0..9);
-$_ = _rndstr 8, @_;
+$_ = _rndstr;
 is length $_, 8;
 ok _index_of($_, @_) > -1 for split '', $_;
 $file = _diagnostic "";
@@ -328,8 +328,6 @@ ok ! _file_exists $file;
 ok _dir_exists $dir;
 @parts = _array \@files;
 is_deeply \@parts, \@files;
-$_ = _array undef, \@files;
-is_deeply $_, \@files;
 sub _dump { 
 #	dump(@_);
 	@_

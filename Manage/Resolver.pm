@@ -14,6 +14,9 @@ use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
 	catfile
+	catdir 
+	tmpdir
+	_max _min
 	_gt _lt
 	_combine
 	_getenv 
@@ -21,24 +24,28 @@ use Manage::Utils qw(
 	_is_value
 	_value_or_else 
 	_interpolate_rex
+	_rndstr
 	_tkinit 
 	_set_selection 
 	_replace_text 
+	_files_in_dir
 	_file_types 
+	_file_exists
+	_contents_of_file
+	_contents_to_file
 	_ask_file 
 	_ask_directory
+	_refresh_menu_button_items
 	_install_menu_button
-	_clipdir
-	_files_in_dir
+	_message
 );
 use Exporter::Easy (
 	OK => [ qw(
 		@given
 		given_title
-		append_given
 		%dollars
-		hasDollar
-		isDollar
+		has_dollar
+		is_dollar
 		dollar_amount
 		make_dollar
 		make_value
@@ -47,6 +54,9 @@ use Exporter::Easy (
 		set_dollars
 		place_given
 		resolve_dollar
+		clipdir
+		next_clip
+		get_clip
 	)],
 );
 our @given = _getenv('given', sub{ () });
@@ -58,22 +68,39 @@ sub given_title {
 	}
 	$title
 }
-sub append_given {
-	my $output = shift;
-	if (@given) {
-		return _combine( $output, @given );
+sub clipdir {
+	my $dir = catdir tmpdir, "clip";
+	mkdir $dir if ! -d $dir;
+	$dir
+}
+sub next_clip {
+	my $dir = clipdir;
+	my $d = 1;
+	foreach my $label (_files_in_dir($dir)) {
+		if ($label =~ /^_(\d+)$/) {
+			$d = _max $d, $1 + 1;
+		}
 	}
-	$output
+	catfile $dir, "_$d"
+}
+sub get_clip {
+	my $win = shift;
+	my $file = shift;
+	Tk::catch {
+		_file_exists($file) ? 
+			_contents_of_file($file) : 
+			$win->clipboardGet;
+	};
 }
 my %dollars;
 BEGIN {
 	tie %dollars, 'Tie::IxHash';
 }
 my $dollar = qr/\$(\d+)|\$\{(\w+)(\:(\w+))?\}/;
-sub hasDollar {
+sub has_dollar {
 	_value_or_else('', shift) =~ $dollar
 }
-sub isDollar {
+sub is_dollar {
 	shift(@_) =~ m[^$dollar$]
 }
 sub dollar_amount {
@@ -122,7 +149,7 @@ sub get_dollars {
 				$x = make_value $amount, $given[$x - 1];
 			}
 			default {
-				$x = make_dollar $amount;
+				$x = '';	#	make_dollar $amount;
 			}
 		}
 		$dollars{$key}->{value} = $x;
@@ -145,6 +172,63 @@ sub inject {
 	$window = $obj->{window};
 	$width = _value_or_else(75, 'width', $obj);
 }
+sub add_clip {
+	my $win = shift;
+	my $file = next_clip;
+	my $text = get_clip $window, $file;
+	my $box = $win->DialogBox(
+		-title => $file,
+		-buttons => ['OK', 'Cancel'],
+		-default_button => 'Cancel');
+	my $widget = $box->Scrolled("Text", 
+		-background => '#ffffff', 
+		-scrollbars => 'osoe'
+	);
+	$widget->pack(-fill => 'both', -expand => 1);
+	$widget->insert('end', $text);
+	my $text_widget = $widget->Subwidget('scrolled');
+	my $menu = $text_widget->menu;
+	$menu->separator;
+	my $label = 'Change file';
+	$menu->add('command', 
+		-label => $label, 
+		-command => sub {
+			my $f = _ask_file($win, $label, $file, [], 1);
+			$file = $f if $f;
+		}
+	);
+	given($box->Show) {
+		when ('OK') {
+			_contents_to_file $file, $text_widget->Contents;
+			return 1
+		}
+		default {
+			return 0
+		}
+	}
+}
+sub clip_menu {
+	my $win = shift;
+	my $title = shift;
+	my $entry = shift;
+	my $btn = shift;
+	my $dir = clipdir;
+	my @files = _files_in_dir($dir);
+	my $command = sub {
+		my $repl = catfile $dir, $_[0];
+		_replace_text($entry, $repl, 1)
+	};
+	if ($btn) {
+		_refresh_menu_button_items $win, $title, $btn, 
+			$command, 
+			sort @files;
+	} else {
+		$btn = _install_menu_button $win, $title, sub {}, 
+			$command, 
+			sort @files;
+	}
+	$btn
+}
 sub resolve_dollar {
 	my $input = shift;
 	my @types = _file_types(shift);
@@ -164,31 +248,23 @@ sub resolve_dollar {
 	my $book = $dlg->NoteBook()->pack( -fill=>'both', -expand=>1 );
 	for my $key (keys %dollars) {
 		my $en;
-		my $tab = $book->add( $dollars{$key}->{value}, 
+		my $page = $book->add( _rndstr, 
 			-label => $key, 
 			-raisecmd => sub{_set_selection($en)}
 		);
-		$en = $tab->Entry(
+		$en = $page->Entry(
 			-width => _value_or_else(75, $width),
 			-textvariable => \$dollars{$key}->{value}
 		)->pack(-side => 'top', -fill=>'x', -expand=>1);
-		my $frm = $tab->Frame()->pack(-side => 'bottom', -fill=>'x', -expand=>1);
+		my $frm = $page->Frame()->pack(-side => 'bottom', -fill=>'x', -expand=>1);
 		my ($row,$col) = (0,0);
-		my $btn = _install_menu_button $frm, 'given', sub{_replace_text($en, $_[0], 1)}, @given;
-		$btn->grid(-row => $row, -column => $col++);
-		my $dir = _clipdir;
-		my @files = _files_in_dir($dir);
-		$btn = _install_menu_button($frm, 'clips', 
-			sub {
-				my $repl = catfile $dir, $_[0];
-				_replace_text($en, $repl, 1)
-			}, 
-			@files);
+		my $btn = _install_menu_button $frm, 'given', sub{}, 
+			sub{_replace_text($en, $_[0], 1)}, @given;
 		$btn->grid(-row => $row, -column => $col++);
 		my $choice = 'f';
 		$frm->Button( 
-			-text=>'Browse...', 
-			-command=> sub { 
+			-text => 'Browse...', 
+			-command => sub { 
 				my $answer = $choice eq 'f' ?
 					_ask_file($window, 'Choose file', 
 						-f $dollars{$key}->{value} ? $dollars{$key}->{value} : '', \@types) :
@@ -205,6 +281,18 @@ sub resolve_dollar {
 			-text => 'directories',
 			-value => 'd',
 			-variable => \$choice)->grid(-row => $row, -column => $col++);
+		++$row;
+		$col = 0;
+		my $btn2 = clip_menu $frm, 'clip', $en; 
+		$btn2->grid(-row => $row, -column => $col++);
+		$frm->Button( 
+			-text => 'Add clip', 
+			-command => sub { 
+				if (add_clip $dlg) {
+					clip_menu $frm, 'clip', $en, $btn2;
+				}
+			} 
+		)->grid(-row => $row, -column => $col++);
 	}
 show:
 	my $answer = $dlg->Show();
@@ -215,7 +303,7 @@ show:
 }
 given (_value_or_else(0, _getenv('test'))) {
 	when (_gt 1) {
-		push @given, "xxx", "yyy";
+		push @given, "/tmp/clip", "*", ".*";
 		$window = _tkinit(1);
 		my $input = "find \${1:dir} -name \"\${GLOB}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
 #		say place_given($input);

@@ -23,12 +23,19 @@ use Manage::Utils qw(
 	_file_exists
 	_fileparse
 	_files_in_dir
-	_clipdir
 	_contents_of_file
 	_contents_to_file
 	_center_window
 	_ask_file
 	_question
+	_rndstr
+	_create_popup_menu
+	_delete_popup_menu
+);
+use Manage::Resolver qw(
+	clipdir
+	next_clip
+	get_clip
 );
 use Manage::Composite;
 our @ISA = qw(Composite);
@@ -40,6 +47,12 @@ sub new {
 sub initialize {
     my( $self ) = @_;
     $self->SUPER::initialize();
+    if ($self->{title} eq 'Clipper') {
+		my @files = _files_in_dir(clipdir, 1);
+		@files = sort @files;
+		push @files, '';
+		$self->{params} = \@files;
+    }
 	$self->{book} = $self->{window}->NoteBook()->pack( -fill=>'both', -expand=>1 );
 	$self->populate($self->mode);
 	_center_window($self->{window});
@@ -47,6 +60,7 @@ sub initialize {
 sub populate {
 	my $self = shift;
     my $mode = shift;
+    $self->{files} = {};
 	my @params = @{$self->{params}};
     if (@params) {
 		foreach (@params) {
@@ -56,35 +70,14 @@ sub populate {
 		$self->page()
 	}
 }
-sub next_clip {
-	my $self = shift;
-	my $d = 1;
-	foreach ($self->{book}->pages) {
-		my $label = $self->{book}->pagecget($_, -label);
-		if ($label =~ /^_(\d+)$/) {
-			$d = _max $d, $1 + 1;
-		}
-	}
-	"_$d"
-}
-sub cliptext {
-	my $self = shift;
-	my $str = $self->{window}->clipboardGet;
-	$str
-}
 sub page {
 	my $self = shift;
 	my $file = shift;
-	my ($name,$label);
-	if (_file_exists($file)) {
-		my(@parts) = _fileparse($file);
-		$label = $parts[0].$parts[2];
-		$name = $file;
-	} else {
-		$label = $self->next_clip;
-		$name = catfile _clipdir, $label;
-		$file = $name;
-	};
+	$file = _file_exists($file) ? $file : next_clip;
+	my @parts = _fileparse($file);
+	my $label = $parts[0].$parts[2];
+	my $name = _rndstr;
+	$self->{files}->{$name} = $file;
 	my $page = $self->{book}->add($name, 
 		-label => $label, 
 		-raisecmd => sub{} 
@@ -93,42 +86,70 @@ sub page {
 		-background => '#ffffff', 
 		-scrollbars => 'osoe'
 	);
+	$widget->pack(-fill => 'both', -expand => 1);
 	my $text_widget = $widget->Subwidget('scrolled');
 	my $menu = $text_widget->menu;
 	$menu->separator;
-	$label = 'Save page';
+	my @labels = ('Save page','Remove page','Open page','New page');
 	$menu->add('command', 
-		-label => $label, 
-		-command => sub { 
-			$file = _ask_file($self->{window}, $label, $file, [], 1);
-			_contents_to_file $file, $text_widget->Contents if $file; 
-		}
-	);
-	$label = 'Remove page';
-	$menu->add('command', 
-		-label => $label, 
-		-command => sub { 
-			my $msg = $self->{book}->pagecget($name, -label);
-			$msg = sprintf "Are you sure about removing\n'%s'", $msg;
-			$self->{book}->delete($name) if _question($self->{window}, $msg, $label) eq 'yes'
-		}
+		-label => $labels[0], 
+		-command => [sub {
+			my ($label,$name) = @_;
+			my $file = _ask_file($self->{window}, $label, $self->{files}->{$name}, [], 1);
+			if ($file) {
+				_contents_to_file $file, $text_widget->Contents;
+				$self->{files}->{$name} = $file;
+				my @parts = _fileparse($file);
+				$self->{book}->pageconfigure($name, -label => $parts[0].$parts[2]);
+			}
+		}, $labels[0], $name]
 	);
 	$menu->add('command', 
-		-label => 'New page', 
+		-label => $labels[1], 
+		-command => [sub { 
+			my ($label,$name) = @_;
+			$self->{book}->delete($name);
+			my $file = $self->{files}->{$name};
+			if (-f $file) {;
+				my $msg = sprintf "Also delete clip\n'%s'", $file;
+				unlink $file if _question($self->{window}, $msg, $_[0]) eq 'yes'
+			}
+			delete $self->{files}->{$name};
+			if (!$self->{book}->pages) {
+				$self->{popup} = _create_popup_menu $self->{window};
+				$self->{popup}->add('command', 
+					-label => $labels[2], 
+					-command => sub { 
+						_delete_popup_menu $self->{window}, $self->{popup};
+						$self->page();
+					}
+				);
+			}
+		}, $labels[1], $name]
+	);
+	$menu->add('command', 
+		-label => $labels[2], 
+		-command => [sub { 
+			my ($label) = @_;
+			my $file = _ask_file($self->{window}, $label, '', [], 0);
+			if ($file) {
+				$self->page($file) 
+			}
+		}, $labels[2]]
+	);
+	$menu->add('command', 
+		-label => $labels[3], 
 		-command => sub { 
 			$self->page() 
 		}
 	);
-	$widget->pack(-fill => 'both', -expand => 1);
-	my $text = _file_exists($file) ? 
-		_contents_of_file $file : 
-		$self->cliptext;
+	my $text = get_clip $self->{window}, $file;
 	$widget->insert('end', $text);
 	$self->{book}->raise($name);
 }
 given (_value_or_else(0, _getenv('testing'))) {
 	when (_gt 0) {
-		my $dir = _clipdir;
+		my $dir = clipdir;
 		my @files = _files_in_dir($dir, 1);
 		(new ViewComposite('title', $dir, 'params', \@files))->relaunch;
 	}
