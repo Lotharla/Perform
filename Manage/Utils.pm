@@ -89,6 +89,7 @@ use Exporter::Easy (
 		_question
 		_message
 		_text_info
+		_text_dialog
 		_file_types
 		_ask_file
 		_ask_directory
@@ -576,7 +577,14 @@ sub _binsearch_numeric {
 	return _binsearch {$desc ? $b <=> $a : $a <=> $b} $_[0], @{$_[1]};
 }
 
-
+sub _object_from_XML {
+	my $fname = shift;
+	system("xmllint --noout \"$fname\"") and die $!;
+	my $xml = _contents_of_file($fname);
+	local $SIG{__WARN__} = sub { };
+	my $XML2JSON = XML::XML2JSON->new();
+	return $XML2JSON->xml2obj($xml);
+}
 
 sub _set_selection {
 	my $en = _value_or_else(undef,0,\@_);
@@ -607,15 +615,6 @@ sub _replace_text {
 			_set_selection($en);
 		}
 	}
-}
-
-sub _object_from_XML {
-	my $fname = shift;
-	system("xmllint --noout \"$fname\"") and die $!;
-	my $xml = _contents_of_file($fname);
-	local $SIG{__WARN__} = sub { };
-	my $XML2JSON = XML::XML2JSON->new();
-	return $XML2JSON->xml2obj($xml);
 }
 
 sub _center_window {
@@ -685,14 +684,43 @@ sub _message {
 }
 
 sub _text_info {
-	my( $title, $text)= @_;
+	my( $title, $text )= @_;
 	my $top = _tkinit 1, $title;
 	require Tk::ROText;
-	my $txt = $top->Scrolled("ROText", -scrollbars => 'e');
+	my $txt = $top->Scrolled("ROText", -scrollbars => 'oe');
 	$txt->pack(-side => 'left', -fill => 'both', -expand => 1);
 	$txt->insert('end', $text);
 	_center_window $top;
 	MainLoop
+}
+
+sub _text_dialog {
+	my $win = _value_or_else _tkinit(1), shift;
+	my $title = shift;
+	my $text = shift;
+	my %menu_items = @_;
+	my $dlg = $win->DialogBox(
+		-title => $title,
+		-buttons => ['OK', 'Cancel'],
+		-default_button => 'Cancel');
+	my $widget = $dlg->Scrolled("Text", 
+		-background => '#ffffff', 
+		-scrollbars => 'osoe'
+	);
+	$widget->pack(-fill => 'both', -expand => 1);
+	$widget->insert('end', $text);
+	my $text_widget = $widget->Subwidget('scrolled');
+	if (%menu_items) {
+		my $menu = $text_widget->menu;
+		$menu->separator;
+		foreach (keys %menu_items) {
+			$menu->command(
+				-label => $_, 
+				-command => [$menu_items{$_},$_,$dlg,$widget]
+			)
+		}
+	}
+	$dlg->Show eq 'OK' ? [$dlg->cget(-title), $text_widget->Contents] : undef
 }
 
 sub _file_types {

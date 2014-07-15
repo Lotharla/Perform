@@ -16,6 +16,7 @@ use Manage::Utils qw(
 	catfile
 	catdir 
 	tmpdir
+	_array
 	_max _min
 	_gt _lt
 	_combine
@@ -38,6 +39,8 @@ use Manage::Utils qw(
 	_refresh_menu_button_items
 	_install_menu_button
 	_message
+	_text_dialog
+	_question
 );
 use Exporter::Easy (
 	OK => [ qw(
@@ -176,36 +179,19 @@ sub add_clip {
 	my $win = shift;
 	my $file = next_clip;
 	my $text = get_clip $window, $file;
-	my $box = $win->DialogBox(
-		-title => $file,
-		-buttons => ['OK', 'Cancel'],
-		-default_button => 'Cancel');
-	my $widget = $box->Scrolled("Text", 
-		-background => '#ffffff', 
-		-scrollbars => 'osoe'
-	);
-	$widget->pack(-fill => 'both', -expand => 1);
-	$widget->insert('end', $text);
-	my $text_widget = $widget->Subwidget('scrolled');
-	my $menu = $text_widget->menu;
-	$menu->separator;
-	my $label = 'Change file';
-	$menu->add('command', 
-		-label => $label, 
-		-command => sub {
-			my $f = _ask_file($win, $label, $file, [], 1);
-			$file = $f if $f;
-		}
-	);
-	given($box->Show) {
-		when ('OK') {
-			_contents_to_file $file, $text_widget->Contents;
-			return 1
-		}
-		default {
-			return 0
-		}
+	my $result = _text_dialog $win, $file, $text;
+	if ($result) {
+		my @result = _array($result);
+		$file = _ask_file($win, 'Save clip', $result->[0], [], 1);;
+		_contents_to_file $file, $result->[1] if $file;
+		return 1
 	}
+	0
+}
+sub remove_clip {
+	my $win = shift;
+	my $file = shift;
+	unlink $file if _file_exists($file) && _question($win, $file, 'Remove clip');
 }
 sub clip_menu {
 	my $win = shift;
@@ -258,9 +244,6 @@ sub resolve_dollar {
 		)->pack(-side => 'top', -fill=>'x', -expand=>1);
 		my $frm = $page->Frame()->pack(-side => 'bottom', -fill=>'x', -expand=>1);
 		my ($row,$col) = (0,0);
-		my $btn = _install_menu_button $frm, 'given', sub{}, 
-			sub{_replace_text($en, $_[0], 1)}, @given;
-		$btn->grid(-row => $row, -column => $col++);
 		my $choice = 'f';
 		$frm->Button( 
 			-text => 'Browse...', 
@@ -281,17 +264,30 @@ sub resolve_dollar {
 			-text => 'directories',
 			-value => 'd',
 			-variable => \$choice)->grid(-row => $row, -column => $col++);
-		++$row;
-		$col = 0;
-		my $btn2 = clip_menu $frm, 'clip', $en; 
-		$btn2->grid(-row => $row, -column => $col++);
+		($row,$col) = (1,0);
+		my $btn = _install_menu_button $frm, 'given', sub{}, 
+			sub{_replace_text($en, $_[0], 1)}, @given;
+		$btn->grid(-row => $row, -column => $col++);
+		$btn = clip_menu $frm, 'Clips', $en; 
+		$btn->grid(-row => $row, -column => $col++);
 		$frm->Button( 
 			-text => 'Add clip', 
-			-command => sub { 
+			-command => [sub { 
+				my ($frm, $en, $btn) = @_;
 				if (add_clip $dlg) {
-					clip_menu $frm, 'clip', $en, $btn2;
+					clip_menu $frm, 'clip', $en, $btn;
 				}
-			} 
+			}, $frm, $en, $btn] 
+		)->grid(-row => $row, -column => $col++);
+		$frm->Button( 
+			-text => 'Remove clip', 
+			-command => [sub { 
+				my ($frm, $en, $btn) = @_;
+				my $file = $dollars{$key}->{value};
+				if (remove_clip $dlg, $file) {
+					clip_menu $frm, 'clip', $en, $btn;
+				}
+			}, $frm, $en, $btn] 
 		)->grid(-row => $row, -column => $col++);
 	}
 show:
