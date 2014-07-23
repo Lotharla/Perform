@@ -22,7 +22,9 @@ use Manage::Utils qw(
 	_combine
 	_getenv 
 	_setenv
+	_is_array_ref
 	_is_value
+	_blessed
 	_value_or_else 
 	_interpolate_rex
 	_rndstr
@@ -41,10 +43,14 @@ use Manage::Utils qw(
 	_message
 	_text_dialog
 	_question
+	_capture_output_2
+	_split_on_whitespace
+	@_separator
 );
 use Exporter::Easy (
 	OK => [ qw(
 		@given
+		set_given
 		given_title
 		%dollars
 		has_dollar
@@ -60,14 +66,19 @@ use Exporter::Easy (
 		clipdir
 		next_clip
 		get_clip
+		devels
 	)],
 );
-our @given = _getenv('given', sub{ () });
+sub set_given {
+	@given = _getenv('given', sub{ () })
+}
+our @given = set_given;
 sub given_title {
 	my $title = shift;
 	$title = _getenv('title', $title);
+	$title .=  $_separator[0];
 	if (@given) {
-		$title .= " on " . ($#given > 0 ? scalar(@given) . " files" : "'$given[0]'");
+		$title .= "on " . ($#given > 0 ? scalar(@given) . " given items" : "'$given[0]'");
 	}
 	$title
 }
@@ -99,7 +110,7 @@ my %dollars;
 BEGIN {
 	tie %dollars, 'Tie::IxHash';
 }
-my $dollar = qr/\$(\d+)|\$\{(\w+)(\:(\w+))?\}/;
+my $dollar = qr/\$(\d+)|\$\{([\w\*]+)(\:(\w+))?\}/;
 sub has_dollar {
 	_value_or_else('', shift) =~ $dollar
 }
@@ -114,45 +125,58 @@ sub dollar_amount {
 }
 sub make_dollar {
 	my $amount = shift;
-	if (ref($amount) eq 'ARRAY') {
+	if (_is_array_ref($amount)) {
 		$amount = $amount->[0] . ':' . $amount->[1];
 	}
 	"\$" . sprintf(looks_like_number($amount) ? '%d' : '{%s}', $amount)
 }
+sub devels {
+	my $sh = catfile dirname(dirname  __FILE__), "../bin/devel.sh";
+	my $output = _capture_output_2($sh . " -s");
+	_split_on_whitespace $output, 0;
+}
 sub make_value {
 	my ($amount,$value) = @_;
-	if (ref($amount) eq 'ARRAY') {
-		if ($amount->[1] eq 'dir' && -f $value) {
-			$value = dirname $value;
+	if (_is_array_ref($amount)) {
+		given ($amount->[1]) {
+			when ('dir') {
+				$value = dirname $value if -f $value;
+			}
+			when ('devels') {
+				$value = join($_separator[2], devels);
+			}
 		}
 	}
 	$value
 }
-sub is_given {
-	my $amount = shift;
-	my $a = ref($amount) eq 'ARRAY' ? $amount->[0] : $amount;
-	looks_like_number($a) && $a >= 0 && $a < @given + 1 ?
-		$a : -1
-}
 sub detect_dollar {
 	_interpolate_rex shift,$dollar,shift,@_
 }
+sub is_given {
+	my $amount = shift;
+	my @gin = @_ < 1 ? @given : @_;
+	my $a = _is_array_ref($amount) ? $amount->[0] : $amount;
+	looks_like_number($a) && $a >= 0 && $a < @gin + 1 ?
+		$a : -1
+}
 sub get_dollars {
+	my $input = shift;
+	my @gin = @_ < 1 ? @given : @_;
 	%dollars = ();
-	detect_dollar (shift, sub {
+	detect_dollar ($input, sub {
 		my $key = $_[0];
 		$dollars{$key} = { amount => dollar_amount(@_), value => $key };
 		my $amount = $dollars{$key}->{amount};
-		my $x = is_given($amount);
+		my $x = is_given($amount, @gin);
 		given ($x) {
 			when (0) {
-				$x = _combine map { make_value $amount, $_ } @given;
+				$x = _combine map { make_value $amount, $_ } @gin;
 			}
 			when (_gt 0) {
-				$x = make_value $amount, $given[$x - 1];
+				$x = make_value $amount, $gin[$x - 1];
 			}
 			default {
-				$x = '';	#	make_dollar $amount;
+				$x = '';
 			}
 		}
 		$dollars{$key}->{value} = $x;
@@ -160,18 +184,20 @@ sub get_dollars {
 	%dollars
 }
 sub set_dollars {
-	return detect_dollar (shift, sub {
+	my $input = shift;
+	return detect_dollar ($input, sub {
 		make_value $dollars{$_[0]}->{amount}, $dollars{$_[0]}->{value}
 	});
 }
 sub place_given {
 	my $input = shift;
-	get_dollars($input);
-	set_dollars($input)
+	my @gin = @_ < 1 ? @given : @_;
+	get_dollars $input, @gin;
+	set_dollars $input
 }
-my ($window, $width);
+my ($obj, $window, $width);
 sub inject {
-	my $obj = shift;
+	$obj = shift;
 	$window = $obj->{window};
 	$width = _value_or_else(75, 'width', $obj);
 }
@@ -179,10 +205,11 @@ sub add_clip {
 	my $win = shift;
 	my $file = next_clip;
 	my $text = get_clip $window, $file;
-	my $result = _text_dialog $win, $file, $text;
+	my @dim = _blessed($obj) ? $obj->dimension("text") : ();
+	my $result = _text_dialog $win, \@dim, $file, $text;
 	if ($result) {
 		my @result = _array($result);
-		$file = _ask_file($win, 'Save clip', $result->[0], [], 1);;
+		$file = _ask_file($win, 'Save clip', $file, [], 1);;
 		_contents_to_file $file, $result->[1] if $file;
 		return 1
 	}
@@ -265,11 +292,12 @@ sub resolve_dollar {
 			-value => 'd',
 			-variable => \$choice)->grid(-row => $row, -column => $col++);
 		($row,$col) = (1,0);
-		my $btn = _install_menu_button $frm, 'given', sub{}, 
+		my $btn = _install_menu_button $frm, 'Given', sub{}, 
 			sub{_replace_text($en, $_[0], 1)}, @given;
 		$btn->grid(-row => $row, -column => $col++);
 		$btn = clip_menu $frm, 'Clips', $en; 
 		$btn->grid(-row => $row, -column => $col++);
+=pod
 		$frm->Button( 
 			-text => 'Add clip', 
 			-command => [sub { 
@@ -289,6 +317,7 @@ sub resolve_dollar {
 				}
 			}, $frm, $en, $btn] 
 		)->grid(-row => $row, -column => $col++);
+=cut
 	}
 show:
 	my $answer = $dlg->Show();
@@ -297,23 +326,4 @@ show:
 	}
 	return $output;
 }
-given (_value_or_else(0, _getenv('test'))) {
-	when (_gt 1) {
-		push @given, "/tmp/clip", "*", ".*";
-		$window = _tkinit(1);
-		my $input = "find \${1:dir} -name \"\${GLOB}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
-#		say place_given($input);
-		say resolve_dollar($input, [["No files", '']]);
-	}
-	when (_gt 0) {
-		$window = _tkinit(1);
-		say resolve_dollar("\${PATTERN}", [["No files", '']]);
-	}
-	default {
-		1
-	}
-}
-
-=pod
-=cut
-
+1;

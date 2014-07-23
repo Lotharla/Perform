@@ -14,12 +14,15 @@ use Manage::Utils qw(
 	_value_or_else 
 	_getenv
 	_set_selection
+	_text_dialog
 	_menu
 	_install_menu
+	@_separator
 );
 use Manage::Resolver qw(
 	has_dollar
 	@given 
+	given_title
 	place_given
 	resolve_dollar
 );
@@ -39,6 +42,13 @@ sub new {
     my $self = $class->SUPER::new(@_);
 	return bless($self, $class);
 }
+sub data {
+	my $self = shift;
+	return $self->SUPER::data(sub {
+		$_[0]->{'alias'} = _value_or_else({}, 'alias', $_[0]);
+		$_[0]->{'assoc'} = _value_or_else({}, 'assoc', $_[0]);
+	});
+}
 sub initialize {
     my( $self ) = @_;
     $self->SUPER::initialize();
@@ -56,15 +66,30 @@ sub initialize {
 	});
 	$submenu = _install_menu($menu, 
 		sub {
-			my $possible = has_dollar($self->item);
-			$submenu->entryconfigure(0, -state => $possible ? 'normal' : 'disabled');
-			$submenu->entryconfigure(1, -state => $possible ? 'normal' : 'disabled');
+			my $dollar = has_dollar($self->item);
+			my $given = @given > 0;
+			$submenu->entryconfigure(1, -state => $given ? 'normal' : 'disabled');
+			$submenu->entryconfigure(2, -state => $given && $dollar ? 'normal' : 'disabled');
+			$submenu->entryconfigure(3, -state => $dollar ? 'normal' : 'disabled');
 		}, 
-		"Resolve '\$...'", sub{$self->pre_commit}, 
+		"Clips ...", sub {
+			use Manage::ViewComposite;
+			(new ViewComposite(
+				title => 'Clipper', 
+			))->relaunch;
+		}, 
+		"Given ...", sub {
+			my @dim = $self->dimension("text");
+			if (_text_dialog $self->{window}, \@dim, "Given", \@given) {
+				my @parts = split /$_separator[0]/, $self->{window}->title;
+				$self->{window}->title(given_title $parts[0]);
+			}
+		}, 
 		'Place given', sub {
 			$self->item(place_given($self->item));
 			_set_selection($self->{entry});
 		},
+		"Resolve '\$...'", sub{$self->pre_commit}, 
 		'Edit'
 	);
 	if ($self->use_history) {
@@ -86,17 +111,6 @@ sub options_menu {
 	my $menu = shift;
 	$self->SUPER::options_menu($menu) if defined($menu);
 }
-sub data {
-	my $self = shift;
-	tie my %data, "PersistHash", $self->file;
-	$data{'alias'} = _value_or_else({}, 'alias', \%data);
-	$data{'assoc'} = _value_or_else({}, 'assoc', \%data);
-	$data{'history'} = _value_or_else({}, 'history', \%data);
-	return sub {
-		%data = @_ if defined $_[0];
-		%data
-	};
-}
 sub populate {
 	my $self = shift;
     my $mode = shift;
@@ -107,13 +121,6 @@ sub populate {
 		Manage::Resolver::inject($self);
 	}
 	$self->pre_select($given[0]);
-}
-sub save {
-	my $self = shift;
-	if ($self->{data}) {
-		my %data = $self->{data}->();
-		PersistHash::DESTROY \%data;     
-	}
 }
 sub pre_select {
 	my $self = shift;
@@ -145,9 +152,5 @@ sub commit {
 		return
 	}
 	$self->SUPER::commit();
-}
-sub finalize {
-	my $self = shift;
-	$self->save
 }
 1;

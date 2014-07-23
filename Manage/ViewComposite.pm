@@ -147,7 +147,7 @@ sub page {
 	$widget->insert('end', $text);
 	$self->{book}->raise($name);
 }
-given (_value_or_else(0, _getenv('testing'))) {
+given (_value_or_else(0, _getenv('test'))) {
 	when (_gt 0) {
 		my $dir = clipdir;
 		my @files = _files_in_dir($dir, 1);

@@ -14,6 +14,7 @@ use Manage::Utils qw(
 	dump pp
 	_gt _lt
 	_blessed
+	_is_hash_ref
 	_getenv 
 	_value_or_else 
 	_make_sure_file
@@ -26,6 +27,13 @@ use Manage::Utils qw(
 	@_separator
 );
 use Manage::PersistHash;
+use Manage::Resolver qw(
+	is_dollar has_dollar dollar_amount make_dollar 
+	make_value
+	place_given
+	resolve_dollar
+	@given
+);
 use Exporter::Easy (
 	OK => [ qw(
 		resolve_alias
@@ -87,7 +95,7 @@ sub update_alias {
 			}
 			last;
 		}
-		unless (ref($href->{$name}) eq 'HASH') {
+		unless (_is_hash_ref($href->{$name})) {
 			last if ! $value;
 			$href->{$name} = {};
 		}
@@ -102,13 +110,10 @@ sub iterate_paths {
 	foreach my $key (sort keys %hash) {
 		my $path = $prefix ? join($_separator[2],$prefix,$key) : $key;
 		my $value = $hash{$key};
-		given (ref($value)) {
-			when ('HASH') {
-				iterate_paths($func, $path, $value) 
-			}
-			default {
-				$func->($path)
-			}
+		if (_is_hash_ref($value)) {
+			iterate_paths($func, $path, $value) 
+		} else {
+			$func->($path)
 		}
 	}
 }
@@ -172,16 +177,32 @@ sub cascades {
 	foreach my $key (sort keys(%hash)) {
 		my $path = $href ? join($_separator[2],$name,$key) : $key;
 		my $value = $hash{$key};
-		given (ref($value)) {
-			when ('HASH') {
-				cascades($menu, $path, $func, $value) 
+		if (is_dollar $key) {
+			my $a = dollar_amount($key);
+			my $v = make_value($a,'');
+			if ($v) {
+				given ($a->[0]) {
+					when ('*') {
+						for (split(/$path_rex/, $v)) {
+							my $p = join($_separator[2],$name,$_);
+							my $val = place_given($value, $_);
+							$menu->command(
+								-label   => $_,
+								-command => [ $func, $p, $val ]
+							)
+						}
+					}
+				}
 			}
-			default {
-				$menu->command(
-					-label   => $key,
-					-command => [ $func, $path, $value ]
-				)
-			}
+			next;
+		}
+		if (_is_hash_ref($value)) {
+			cascades($menu, $path, $func, $value) 
+		} else {
+			$menu->command(
+				-label   => $key,
+				-command => [ $func, $path, $value ]
+			)
 		}
 	};
 }
@@ -247,14 +268,14 @@ sub install_popup_button {
 	$btn
 }
 given (_value_or_else(0, _getenv('test'))) {
-	when (_gt 1) {
+	when (_gt 2) {
 		tie %data, "PersistHash", $_entries;
 		$window = _tkinit(0);
 		install_popup_button('Alias', sub { say pp @_ })->pack;
 		_center_window ($window);
 		MainLoop();
 	}
-	when (_gt 0) {
+	when (_gt 1) {
 		my $file = "/tmp/.entries";
 		_make_sure_file $file;
 		tie %data, "PersistHash", $file;
@@ -265,7 +286,7 @@ given (_value_or_else(0, _getenv('test'))) {
 		MainLoop();
 		dump \%data;
 	}
-	when (_lt 0) {
+	when (_gt 0) {
 		%data = (
 			alias => {
 				ant   => "bash /home/lotharla/work/bin/ant-or-make.sh \"\$1\"",
@@ -284,6 +305,17 @@ given (_value_or_else(0, _getenv('test'))) {
 		_center_window ($window);
 		MainLoop();
 		dump \%data;
+	}
+	when (_lt -1) {
+		Manage::Resolver::inject({window => _tkinit(1)});
+		push @given, "/tmp/clip", "*", ".*";
+		my $input = "find \${1:dir} -name \"\${GLOB}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
+#		say place_given($input);
+		say resolve_dollar($input, [["No files", '']]);
+	}
+	when (_lt 0) {
+		Manage::Resolver::inject({window => _tkinit(1)});
+		say resolve_dollar("\${PATTERN}", [["No files", '']]);
 	}
 	default {
 		1

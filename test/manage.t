@@ -15,6 +15,7 @@ use Manage::Utils qw(
 	catfile
 	catdir
 	tmpdir
+	@_separator
 	$_whitespace 
 	_has_whitespace 
 	_split_on_whitespace 
@@ -29,6 +30,7 @@ use Manage::Utils qw(
 	_flip_hash 
 	_binsearch_numeric
 	_capture_output 
+	_capture_output_2
 	_check_output 
 	_file_exists
 	_dir_exists
@@ -54,10 +56,12 @@ use Manage::Utils qw(
 );
 use Manage::Resolver qw(
 	is_dollar has_dollar dollar_amount make_dollar 
+	make_value
 	get_dollars set_dollars detect_dollar 
 	@given 
 	given_title
 	place_given
+	devels
 );
 use Manage::Alias qw(
 	resolve_alias 
@@ -191,10 +195,10 @@ ok -f $file;
 {
 	tie my %data, "PersistHash", $file;
 	my @keys = sort keys(%data);
-	is_deeply \@keys, ["__file__","alias","assoc","history"];
+	is_deeply \@keys, ["__file__","alias","assoc","history","options"];
 	PersistHash::store(\%data, $file);
 	$temp = PersistHash::fetch({}, $file);
-	is_deeply $temp, \%data;
+	is_deeply $temp, \%data;	#	50
 }
 assoc_file_types();
 is @assoc_file_types, 6;
@@ -269,7 +273,7 @@ _setenv 'given', "xxx";
 ok _string_contains given_title('title'), "on 'xxx'", -1;
 _setenv 'given', "xxx\nzzz";
 @given = _getenv 'given';
-ok _string_contains given_title('title'), "on 2 files", -1;
+ok _string_contains given_title('title'), "on 2 given items", -1;
 _setenv 'given', undef;
 is _getenv('given', 'x'), 'x';
 _setenv 'given', '';
@@ -338,6 +342,18 @@ $p = [$p, @files];
 is _call([$p, @files]), 2 * @files;
 $p = [$p, @files];
 is _call([$p, @files]), 3 * @files;
+my $doll = "\${1:dir}";
+my $a = dollar_amount($doll);
+is make_value($a,'x'), 'x';
+is make_value($a,$_entries), dirname($_entries);
+$doll = "\${*:devels}";
+ok has_dollar($doll) && is_dollar($doll);
+$a = dollar_amount($doll);
+is_deeply $a, ["*","devels"];
+ok _string_contains make_value($a,'x'), $_separator[2];
+@_ = devels
+ok @_ > 1;
+is place_given("\$1", @_), $_[0];
 =pod
 =cut
 exit;

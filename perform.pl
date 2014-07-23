@@ -17,6 +17,9 @@ use Manage::Utils qw(
 	_value_or_else 
 	_tempFilename
 	_capture_output
+	_perform
+	_perform_2
+	_capture_output_2
 	_diagnostic
 	_tkinit
 	_center_window
@@ -48,41 +51,26 @@ my $command = _capture_output(
 		$modifier = $obj->{modifier};
 	}
 );
-my $terminal = _chomp(`gconftool-2 -g /desktop/gnome/applications/terminal/exec`);
 sub terminalize {
+	my $terminal = _chomp(`gconftool-2 -g /desktop/gnome/applications/terminal/exec`);
 	my $output = _flatten $_[0];
 	$output = _escapeDoubleQuotes $output;
 	$output = "bash -c '" . $output . " | less'";
 	return _combine( "$terminal", "-t", sprintf("\"%s\"", $output), "-e", "\"$output\"" );
 }
-sub perform {
-	_diagnostic "@_";
-	exec @_;
-}
-sub perform_2 {
-	use IPC::Open3;
-	no warnings 'once';
-	my $command = _escapeDoubleQuotes "@_";
-	$command = "perl -e 'exec \"$command\"'";
-	_diagnostic $command;
-	my $pid = open3(\*CHLD_IN, \*CHLD_OUT, \*CHLD_ERR, $command) or die "open3() failed $!";
-	while (<CHLD_OUT>) {
-	    print;
-	} 
-}
 if ($command) {
 	given ($modifier) {
 		when ('Alt') {
-			perform terminalize($command)
+			_perform terminalize($command)
 		}
 		when ('Control') {
 			my $dir = "/tmp/out";
 			my $file = _tempFilename 'outXXXX', $dir;
-			my $text = _capture_output [\&perform_2, $command], $file;
+			my $text = _capture_output_2 $command;
 			_text_info $command, $text;
 		}
 		default {
-			perform $command
+			_perform $command
 		}
 	}
 }

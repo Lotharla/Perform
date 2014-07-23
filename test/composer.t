@@ -21,6 +21,8 @@ use Manage::Utils qw(
 	_make_sure_file
 	_check_output
 	$_entries
+	_tkinit
+	_text_dialog
 );
 use Manage::Alias qw(
 	resolve_alias 
@@ -33,17 +35,18 @@ use Manage::Assoc qw(
 use Manage::Resolver qw(
 	place_given
 	@given
+	set_given
 );
 use Manage::Composer;
 given (_value_or_else(0, _getenv('testing'))) {
 	when (_ne 0) {
 #		$ENV{'given'} = "/home/lotharla/work/perl\n/home/lotharla/work/bin/test.sh\nabc";
-		my $perf = new Composer( 
+		my $composer = new Composer( 
 			title => "Testing",
 			label => '<<-->>',
 			file => $_entries
 		);
-		$perf->relaunch;
+		$composer->relaunch;
 		exit
 	}
 }
@@ -54,17 +57,17 @@ my $str = reverse $alias;
 my $temp = '/tmp/.entries';
 ok _make_sure_file($temp, 1);
 {
-	my $perf = new Composer(
+	my $composer = new Composer(
 		file => $temp, 
 	);
-	my %data = $perf->{data}->();
+	my %data = $composer->{data}->();
 	my @keys = sort keys %data;
-	is_deeply \@keys, ["__file__","alias","assoc","history"];
+	is_deeply \@keys, ["__file__","alias","assoc","history","options"];
 	update_assoc $glob, $alias;
 	update_alias $alias, $ntd;
-	$perf->give($str);
-	$perf->change_history('add');
-	$perf->cancel;
+	$composer->give($str);
+	$composer->change_history('add');
+	$composer->cancel;
 }
 tie my %data, "PersistHash", $temp;
 is $data{'assoc'}->{$glob}, $alias;
@@ -72,32 +75,43 @@ is $data{'alias'}->{$alias}, $ntd;
 my @history = values %{$data{'history'}};
 ok _array_contains(\@history, $str);
 _setenv 'given', "1.xxx\n2.yyy\n3.zzz";
+set_given;
 {
-	my $perf = new Composer(
+	my $composer = new Composer(
 		file => $temp, 
 	);
-	my $item = $perf->item;
-	ok $perf->new_entry($item);
+	my $item = $composer->item;
+	ok $composer->is_new_entry($item);
 	$ntd =~ s/\$1/.*/g;
-	my $ref = $perf->can('commit');
-	_check_output([$ref, $perf], qr/$ntd/);
-	ok ! $perf->new_entry($perf->item);
+	my $ref = $composer->can('commit');
+	_check_output([$ref, $composer], qr/$ntd/);
+	ok ! $composer->is_new_entry($composer->item);
+	$composer->cancel;
 }
 {
-	my $perf = new Composer(
+	my $composer = new Composer(
 		file => $_entries, 
 	);
-	my %history = $perf->history;
-	my @timeline = $perf->timeline;
+	my %history = $composer->history;
+	my @timeline = $composer->timeline;
 #	say $history{$_} foreach @timeline;
 	my @pointers;
 	foreach (values %history) {
-		my $ptr = $perf->get_pointer_on_timeline($_, @timeline);
+		my $ptr = $composer->get_pointer_on_timeline($_, @timeline);
 		push @pointers, $ptr;
 	}
 	ok !_duplicates(@pointers);
 	@pointers = sort {$a<=>$b} @pointers;
 	is $#pointers, @pointers - 1;
+	$composer->cancel;
+}
+{
+	my $win = _tkinit(0);
+	my $canvas = $win->Scrolled('Canvas', -width => 300, -height => 300);
+	_text_dialog $win, [20,2], "Given", \@given;
+	my $i = 0;
+	$canvas->createText(100, 100*($i++) + 10, -text => $_) foreach @given;
+	$canvas->pack;
 	MainLoop();
 }
 =pod

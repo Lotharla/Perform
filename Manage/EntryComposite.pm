@@ -15,6 +15,7 @@ use Manage::Utils qw(
 	_index_of
 	_getenv
 	_now
+	_call
 	_index_of
 	_tkinit
 	_center_window
@@ -33,10 +34,30 @@ sub new {
     my $self = $class->SUPER::new(@_);
 	return bless($self, $class);
 }
+sub data {
+	my $self = shift;
+	my $func = shift;
+	return $self->SUPER::data(sub {
+		$_[0]->{'history'} = _value_or_else({}, 'history', $_[0]);
+		$_[0]->{'options'} = _value_or_else({}, 'options', $_[0]);
+		_call [$func, $_[0]];
+	});
+}
+sub listmode {
+	my ($self,$listmode) = @_;
+	if ($self->{data}) {
+		my %data = $self->{data}->();
+		$data{options}->{"list-mode"} = $listmode if $listmode;
+		$listmode = $data{options}->{"list-mode"};
+	}
+	_value_or_else 1, $listmode
+}
 sub initialize {
 	my $self = shift;
     $self->SUPER::initialize();
-	($self->{mode}, $self->{listmode}) = $self->mode($self->{listmode});
+	$self->{mode} = $self->mode();
+	$self->{listmode} = $self->listmode();
+	($self->{width}, $self->{height}) = $self->dimension('list');
 	$self->top($self->{listmode});
 	$self->{window}->bind('<KeyPress-Up>', sub {$self->move_entry(-1)});
 	$self->{window}->bind('<KeyPress-Down>', sub {$self->move_entry(+1)});
@@ -57,7 +78,8 @@ sub initialize {
 sub top {
 	my $self = shift;
 	my $listmode = shift;
-	$self->{top} = $self->{window}->Frame->pack(-side => 'top', -fill=>'x', -expand=>1);
+	$self->{top} = 
+		$self->{window}->Frame->pack(-side => 'top', -padx=>1, -pady=>5, -fill=>'x', -expand=>1);
 	if ($listmode == 0) {
 		my $widget = $self->{top}->LabEntry(
 			-label => $self->{label}, -labelPack => [ -side => "left" ],
@@ -127,12 +149,18 @@ sub history_menu {
 	$menu = _install_menu(
 		$popup ? $self->{window} : $menu, 
 		sub {
-			my $differs = $self->new_entry($self->item);
+			my $differs = $self->is_new_entry($self->item);
 			my $hasNoPoint = $self->{point} < 0;
-			$menu->entryconfigure(0, -state => $differs ? 'normal' : 'disabled');
-			$menu->entryconfigure(1, -state => $differs || $hasNoPoint ? 'disabled' : 'normal');
-			$menu->entryconfigure(2, -state => $hasNoPoint || !$differs ? 'disabled' : 'normal');
+			my $hasNoHistory = $self->{point} < -1;
+			$menu->entryconfigure(0, -state => $hasNoHistory ? 'disabled' : 'normal');
+			$menu->entryconfigure(1, -state => $hasNoHistory ? 'disabled' : 'normal');
+			$menu->entryconfigure(3, -state => $differs ? 'normal' : 'disabled');
+			$menu->entryconfigure(4, -state => $differs || $hasNoPoint ? 'disabled' : 'normal');
+			$menu->entryconfigure(5, -state => $hasNoPoint || !$differs ? 'disabled' : 'normal');
 		}, 
+		'go to next', sub {$self->move_point_in_time(+1)}, 
+		'go to previous', sub {$self->move_point_in_time(-1)}, 
+		'-', sub{}, 
 		'add to history', sub{ $self->change_history('add') }, 
 		'remove from history', sub{ $self->change_history('remove') }, 
 		'update history', sub{ $self->change_history('update') },
@@ -146,7 +174,6 @@ sub permanent_list {
 sub options_menu {
 	my $self = shift;
 	my $menu = shift;
-	return if ! $self->{listmode};
 	my $popup = !defined($menu);
 	$menu->add('separator') if ! $popup;
 	$menu = _install_menu(
@@ -156,17 +183,31 @@ sub options_menu {
 		}, 
 		$popup ? undef : 'Options'
 	);
-	if ($self->{listmode} != 0) {
-		$menu->add('checkbutton', 
-			-label => 'permanent list', 
-			-onvalue => 1, -offvalue => -1, 
-			-variable => \$self->{listmode},
-			-command => sub {
-				$self->{relaunch} = 1;
-				$self->cancel;
+	$menu->add('checkbutton', 
+		-label => 'permanent list', 
+		-onvalue => 1, -offvalue => -1, 
+		-variable => \$self->{listmode},
+		-command => sub {
+			$self->listmode($self->{listmode});
+			$self->cancel(1);
+		}
+	);
+	$menu->add('command', 
+		-label => 'list dimension', 
+		-command => sub {
+			if ($self->ask_dimension('list')) {
+				$self->cancel(1);
 			}
-		);
-	}
+		}
+	);
+	$menu->add('command', 
+		-label => 'text dimension', 
+		-command => sub {
+			if ($self->ask_dimension('text')) {
+				$self->save;
+			}
+		}
+	);
 }
 sub item { $_[0]->{item}=$_[1] if defined $_[1]; $_[0]->{item} }
 sub give {
@@ -174,15 +215,6 @@ sub give {
 	my $item = shift;
 	$self->item($item);
 	$self->set_point_in_time($item) if $self->use_history;
-}
-sub data {
-	my $self = shift;
-	tie my %data, "PersistHash", $self->file;
-	$data{'history'} = _value_or_else({}, 'history', \%data);
-	return sub {
-		%data = @_ if defined $_[0];
-		%data
-	};
 }
 sub populate {
 	my $self = shift;
@@ -196,7 +228,6 @@ sub populate {
 	if ($mode == 1) {
 		$self->{items}->($self->{params});
 	} else {
-		$self->{data} = $self->data();
 		$self->history('');
 		$self->set_point_in_time($self->item);
 	}
@@ -276,6 +307,7 @@ sub get_pointer_on_timeline {
 sub get_point_in_time {
     my $self = shift;
 	my @timeline = $self->timeline;
+	return -2 if @timeline < 1;
 	my $ptr = $self->get_pointer_on_timeline(shift, @timeline);
 	$ptr > -1 ? 
 		$timeline[$ptr] : 
@@ -285,7 +317,7 @@ sub set_point_in_time {
     my $self = shift;
 	$self->{point} = $self->get_point_in_time(shift);
 }
-sub new_entry {
+sub is_new_entry {
     my $self = shift;
 	$self->get_point_in_time(@_) < 0
 }
@@ -365,10 +397,6 @@ sub commit {
     $self->SUPER::commit();
 }
 given (_value_or_else('', _getenv('test'))) {
-	when (_lt -1) {
-		my $ec = new EntryComposite('file', $_entries, 'label', '<<--History-->>', 'listmode', '-1');
-		relaunch $ec;
-	}
 	when (_gt 1) {
 		my $ec = new EntryComposite('file', $_entries, 'label', '<<--History-->>');
 		relaunch $ec;
@@ -379,9 +407,13 @@ given (_value_or_else('', _getenv('test'))) {
 		$ec->give(cwd());
 		relaunch $ec;
 	}
+	when (_lt -1) {
+		my $ec = new EntryComposite('file', $_entries, 'label', '<<--History-->>');
+		relaunch $ec;
+	}
 	when (_lt 0) {
 		my @paths = sort split( /:/, $ENV{PATH});
-		my $ec = new EntryComposite('title', 'Environment', 'label', 'path', 'params', \@paths, 'listmode', '-1');
+		my $ec = new EntryComposite('title', 'Environment', 'label', 'path', 'params', \@paths);
 		$ec->give(cwd());
 		relaunch $ec;
 	}
