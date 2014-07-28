@@ -72,7 +72,7 @@ sub initialize {
 			$submenu->entryconfigure(2, -state => $given && $dollar ? 'normal' : 'disabled');
 			$submenu->entryconfigure(3, -state => $dollar ? 'normal' : 'disabled');
 		}, 
-		"Clips ...", sub {
+		"Clipper ...", sub {
 			use Manage::ViewComposite;
 			(new ViewComposite(
 				title => 'Clipper', 
@@ -100,6 +100,7 @@ sub initialize {
 	if ($self->{extendMenu}) {
 		$self->{extendMenu}($self, $menu);
 	}
+	$self->update_list;
 }
 sub history_menu {
 	my $self = shift;
@@ -131,7 +132,7 @@ sub pre_select {
 			$found = resolve_alias($found);
 			if ($found) {
 				$found = place_given($found);
-				$self->item($found);
+				$self->give($found);
 			}
 		}
 	}

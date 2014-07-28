@@ -13,7 +13,7 @@ use Manage::Utils qw(
 	_gt _lt _eq _ne
 	_value_or_else
 	_index_of
-	_getenv
+	_getenv_once
 	_now
 	_call
 	_index_of
@@ -55,8 +55,13 @@ sub listmode {
 sub initialize {
 	my $self = shift;
     $self->SUPER::initialize();
+    $self->{options} = $self->{options} ? $self->{options} : {};
 	$self->{mode} = $self->mode();
 	$self->{listmode} = $self->listmode();
+	if ($self->{options}->{"list-multiple"}) {
+		$self->{mode} = 1;
+		$self->{listmode} = 1;
+	}
 	($self->{width}, $self->{height}) = $self->dimension('list');
 	$self->top($self->{listmode});
 	$self->{window}->bind('<KeyPress-Up>', sub {$self->move_entry(-1)});
@@ -155,8 +160,8 @@ sub history_menu {
 			$menu->entryconfigure(0, -state => $hasNoHistory ? 'disabled' : 'normal');
 			$menu->entryconfigure(1, -state => $hasNoHistory ? 'disabled' : 'normal');
 			$menu->entryconfigure(3, -state => $differs ? 'normal' : 'disabled');
-			$menu->entryconfigure(4, -state => $differs || $hasNoPoint ? 'disabled' : 'normal');
-			$menu->entryconfigure(5, -state => $hasNoPoint || !$differs ? 'disabled' : 'normal');
+			$menu->entryconfigure(4, -state => $self->selection && !$differs? 'normal' : 'disabled');
+			$menu->entryconfigure(5, -state => !$hasNoPoint && $differs ? 'normal' : 'disabled');
 		}, 
 		'go to next', sub {$self->move_point_in_time(+1)}, 
 		'go to previous', sub {$self->move_point_in_time(-1)}, 
@@ -214,7 +219,10 @@ sub give {
 	my $self = shift;
 	my $item = shift;
 	$self->item($item);
-	$self->set_point_in_time($item) if $self->use_history;
+	if ($self->use_history) {
+		$self->set_point_in_time($item);
+		$self->update_list;
+	}
 }
 sub populate {
 	my $self = shift;
@@ -222,7 +230,10 @@ sub populate {
     return if ! $mode;
 	tie my @items,'Tk::Listbox', $self->{listbox};
 	$self->{items} = sub {
-		@items = @{$_[0]} if defined $_[0];
+		if ($_[0]) {
+			pop @items while @items;
+			push @items, @{$_[0]};
+		}
 		@items
 	};
 	if ($mode == 1) {
@@ -253,21 +264,30 @@ sub history {
 	}
 	return %{$data{'history'}};
 }
+sub selection {
+    my $self = shift;
+	$self->{listbox}->curselection
+}
 sub selected {
     my $self = shift;
-	my $sel = $self->{listbox}->curselection;
+	my $sel = $self->selection;
     return undef if ! $sel;
     my @sel = sort {$a<=>$b} @{$sel};
-	$sel = shift(@sel);
-    return undef if ! defined($sel);
+    return undef if @sel < 1;
 	my @items = $self->{items}->();
-	$items[$sel];
+	if ($self->{options}->{"list-multiple"}) {
+		join " ", @items[@sel];
+	} else {
+		$sel = shift(@sel);
+		$items[$sel];
+	}
 }
 sub update_list {
 	my $self = shift;
-	my $i = _index_of($self->item(), $self->{items}->());
+	my $item = _value_or_else $self->item(), shift;
+	my $i = _index_of($item, $self->{items}->());
 	if ($i > -1) {
-		my $sel = $self->{listbox}->curselection;
+		my $sel = $self->selection;
 		$self->{listbox}->selectionClear(0,'end') if $sel;
 		$self->{listbox}->selectionSet($i);
 		$self->{listbox}->see($i)
@@ -319,7 +339,9 @@ sub set_point_in_time {
 }
 sub is_new_entry {
     my $self = shift;
-	$self->get_point_in_time(@_) < 0
+	my $item = shift;
+	return undef if ! $item;
+	$self->get_point_in_time($item) < 0
 }
 sub move_point_in_time {
     my $self = shift;
@@ -348,10 +370,10 @@ sub change_history {
 	my $confirm = shift;
 	given ($oper) {
 		when ('remove') {
-			my @sel = @{$self->{listbox}->curselection};
+			my @sel = @{$self->selection};
 			my $message = sprintf("Are you sure about removing\n'%s'", 
 				(@sel > 1 ? @sel . " items" : $self->item));
-			if ( $confirm || _question($self->{window}, $message, "Update entry") eq 'yes' ) {
+			if ( $confirm || _question($self->{window}, $message, "Change history") eq 'yes' ) {
     			if (@sel > 1) {
 					my @items = $self->{items}->();
 					foreach (@sel) {
@@ -368,7 +390,7 @@ sub change_history {
 		}
 		when ('update') {
 			my $message = sprintf("Are you sure about updating\n'%s'", $self->history($self->{point}));
-			if ( $confirm || _question($self->{window}, $message, "Update entry") eq 'yes' ) {
+			if ( $confirm || _question($self->{window}, $message, "Change history") eq 'yes' ) {
 				$self->history($self->{point}, $self->item);
 			}
 		}
@@ -384,6 +406,7 @@ sub change_history {
 			$self->set_point_in_time($self->selected);
 			$self->{entry}->icursor(0);
 		}
+		$self->update_list;
 	}
 }
 sub commit {
@@ -396,14 +419,15 @@ sub commit {
 	print $output;
     $self->SUPER::commit();
 }
-given (_value_or_else('', _getenv('test'))) {
+given (_getenv_once('test', '')) {
 	when (_gt 1) {
 		my $ec = new EntryComposite('file', $_entries, 'label', '<<--History-->>');
 		relaunch $ec;
 	}
 	when (_gt 0) {
 		my @paths = sort split( /:/, $ENV{PATH});
-		my $ec = new EntryComposite('title', 'Environment', 'label', 'path', 'params', \@paths);
+		my $ec = new EntryComposite('title', 'Environment', 'label', 'PATH', 'params', \@paths, 
+			'options', {"list-multiple" => 0});
 		$ec->give(cwd());
 		relaunch $ec;
 	}

@@ -15,7 +15,7 @@ use Manage::Utils qw(
 	_gt _lt
 	_blessed
 	_is_hash_ref
-	_getenv 
+	_getenv_once 
 	_value_or_else 
 	_make_sure_file
 	_tkinit 
@@ -267,7 +267,7 @@ sub install_popup_button {
 	);
 	$btn
 }
-given (_value_or_else(0, _getenv('test'))) {
+given (_getenv_once('test', 0)) {
 	when (_gt 2) {
 		tie %data, "PersistHash", $_entries;
 		$window = _tkinit(0);

@@ -20,6 +20,7 @@ use Exporter::Easy (
 		tmpdir
 		catfile
 		catdir
+		ok is isnt is_deeply done_testing
 		_max
 		_min
 		_gt
@@ -45,6 +46,7 @@ use Exporter::Easy (
 		_is_value
 		_value_or_else
 		_getenv
+		_getenv_once
 		_setenv
 		_now
 		_rndstr
@@ -202,15 +204,25 @@ sub _getenv {
 	my $key = _win32() ? uc($_[0]) : $_[0];
 	my $value = _value_or_else '', $key, \%ENV;
 	my $default = _value_or_else '', 1, \@_;
+	$_[2]->() if _is_code_ref $_[2];
 	if (! _is_value($value)) {
-		return $default->() if _is_code_ref($default);
-		return $default;
+		return _is_code_ref($default) ? 
+			$default->() : 
+			$default;
 	}
 	if (looks_like_number($default) && !looks_like_number($value)) {
 		return $default;
 	}
 	my @values = split(/$_separator[1]/, $value);
-	return @values > 1 ? @values : $values[0];
+	return @values > 1 ? 
+		@values : 
+		$values[0];
+}
+sub _getenv_once {
+	my $key = _win32() ? uc($_[0]) : $_[0];
+	_getenv @_[0,1], sub {
+		delete $ENV{$key}
+	}
 }
 sub _setenv {
 	my $key = _win32() ? uc($_[0]) : $_[0];
@@ -230,7 +242,7 @@ sub _index_of {
 	my $value = shift;
 	my @array = @_;
 	my $i = 0;
-	++$i until $i > $#array or $array[$i] eq $value;
+	++$i until $i > $#array || (defined($value) ? $array[$i] eq $value : !defined($array[$i]));
 	return $i > $#array ? -1 : $i;
 }
 sub _array_contains {
@@ -703,11 +715,13 @@ sub _text_dialog {
 		my $book = $dlg->NoteBook()->pack( -fill=>'both', -expand=>1 );
 		my $i = 0;
 		foreach (_array($text)) {
+			my $widget;
 			my $page = $book->add($i, 
 				-label => $i++, 
-				-raisecmd => sub{} 
+				-raisecmd => sub {$widget->tagAdd('sel', '1.0', 'end -1 chars')} 
 			);
-			push @widgets, &$text_widget($page, $_);
+			$widget = &$text_widget($page, $_);
+			push @widgets, $widget;
 		}
 	} else {
 		push @widgets, &$text_widget($dlg, $text);

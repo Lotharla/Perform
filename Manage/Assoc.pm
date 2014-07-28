@@ -13,7 +13,7 @@ use Manage::Utils qw(
 	dump pp
 	_lt	_gt _ne _eq
 	_blessed
-	_getenv 
+	_getenv_once 
 	_value_or_else 
 	_flip_hash 
 	_is_glob
@@ -131,7 +131,7 @@ sub refill {
 	}
 	undef @assoc_file_types;
 }
-given (_value_or_else(0, _getenv('test'))) {
+given (_getenv_once('test', 0)) {
 	when (_gt 0) {
 		%data = (
 			assoc => {

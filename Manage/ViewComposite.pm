@@ -19,7 +19,7 @@ use Manage::Utils qw(
 	_chomp
 	_combine
 	_value_or_else 
-	_getenv
+	_getenv_once
 	_file_exists
 	_fileparse
 	_files_in_dir
@@ -147,7 +147,7 @@ sub page {
 	$widget->insert('end', $text);
 	$self->{book}->raise($name);
 }
-given (_value_or_else(0, _getenv('test'))) {
+given (_getenv_once('test', 0)) {
 	when (_gt 0) {
 		my $dir = clipdir;
 		my @files = _files_in_dir($dir, 1);

@@ -64,8 +64,6 @@ if ($command) {
 			_perform terminalize($command)
 		}
 		when ('Control') {
-			my $dir = "/tmp/out";
-			my $file = _tempFilename 'outXXXX', $dir;
 			my $text = _capture_output_2 $command;
 			_text_info $command, $text;
 		}

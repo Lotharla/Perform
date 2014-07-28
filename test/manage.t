@@ -1,3 +1,4 @@
+#!/usr/bin/env perl
 use diagnostics; # this gives you more debugging information
 use warnings;    # this warns you of bad practices
 use strict;      # this prevents silly errors
