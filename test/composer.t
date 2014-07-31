@@ -28,10 +28,7 @@ use Manage::Alias qw(
 	resolve_alias 
 	update_alias
 );
-use Manage::Assoc qw(
-	find_assoc
-	update_assoc
-);
+use Manage::Settings;
 use Manage::Resolver qw(
 	place_given
 	@given
@@ -62,8 +59,8 @@ ok _make_sure_file($temp, 1);
 	);
 	my %data = $composer->{data}->();
 	my @keys = sort keys %data;
-	is_deeply \@keys, ["__file__","alias","assoc","history","options"];
-	update_assoc $glob, $alias;
+	is_deeply \@keys, ["__file__","alias","assoc","environ","history","options"];
+	'Settings'->modify_setting($data{'assoc'}, $glob, $alias);
 	update_alias $alias, $ntd;
 	$composer->give($str);
 	$composer->change_history('add');

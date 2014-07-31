@@ -31,8 +31,7 @@ use Manage::Composite;
 our @ISA = qw(Composite);
 sub new {
 	my $class = shift;
-    my $self = $class->SUPER::new(@_);
-	return bless($self, $class);
+    return $class->SUPER::new(@_);
 }
 sub data {
 	my $self = shift;

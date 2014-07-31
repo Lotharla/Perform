@@ -30,29 +30,27 @@ use Manage::Alias qw(
 	resolve_alias
 	install_menu_button
 );
-use Manage::Assoc qw(
-	assoc_file_types 
-	find_assoc
-	show_assoc
-);
+use Manage::Settings;
 use Manage::EntryComposite;
 our @ISA = qw(EntryComposite);
 sub new {
 	my $class = shift;
-    my $self = $class->SUPER::new(@_);
-	return bless($self, $class);
+    return $class->SUPER::new(@_);
 }
 sub data {
 	my $self = shift;
 	return $self->SUPER::data(sub {
 		$_[0]->{'alias'} = _value_or_else({}, 'alias', $_[0]);
 		$_[0]->{'assoc'} = _value_or_else({}, 'assoc', $_[0]);
+		$_[0]->{'environ'} = _value_or_else({}, 'environ', $_[0]);
 	});
 }
 sub initialize {
     my( $self ) = @_;
     $self->SUPER::initialize();
-	my $menu = _menu($self->{window});
+	my %data = $self->{data}->();
+    Settings->apply('Environment', %data);
+    my $menu = _menu($self->{window});
 	my $submenu;
 	$submenu = install_menu_button($menu, 'Alias', sub { 
 		my ($path, $value) = @_; 
@@ -60,23 +58,13 @@ sub initialize {
 		_set_selection($self->{entry});
 	});
 	$submenu->configure('-underline', 0);
-	$menu->command(-label=>'Associations', -underline=>1, -command => sub{
-		$submenu->unpost;
-		show_assoc
-	});
 	$submenu = _install_menu($menu, 
 		sub {
 			my $dollar = has_dollar($self->item);
 			my $given = @given > 0;
-			$submenu->entryconfigure(1, -state => $given ? 'normal' : 'disabled');
-			$submenu->entryconfigure(2, -state => $given && $dollar ? 'normal' : 'disabled');
-			$submenu->entryconfigure(3, -state => $dollar ? 'normal' : 'disabled');
-		}, 
-		"Clipper ...", sub {
-			use Manage::ViewComposite;
-			(new ViewComposite(
-				title => 'Clipper', 
-			))->relaunch;
+			$submenu->entryconfigure(0, -state => $given ? 'normal' : 'disabled');
+			$submenu->entryconfigure(1, -state => $given && $dollar ? 'normal' : 'disabled');
+			$submenu->entryconfigure(2, -state => $dollar ? 'normal' : 'disabled');
 		}, 
 		"Given ...", sub {
 			my @dim = $self->dimension("text");
@@ -90,8 +78,18 @@ sub initialize {
 			_set_selection($self->{entry});
 		},
 		"Resolve '\$...'", sub{$self->pre_commit}, 
+		"Clipper ...", sub {
+			use Manage::PageComposite;
+			(new PageComposite(
+				title => 'Clipper', 
+			))->relaunch;
+		}, 
 		'Edit'
 	);
+	$menu->command(-label=>'Settings', -underline=>0, -command => sub{
+		$submenu->unpost;
+		$self->show_settings;
+	});
 	if ($self->use_history) {
 		$self->history_menu($menu);
 	} else {
@@ -101,6 +99,14 @@ sub initialize {
 		$self->{extendMenu}($self, $menu);
 	}
 	$self->update_list;
+}
+sub show_settings {
+	my $self = shift;
+	(new Settings(
+		title => 'Settings',
+		data => $self->{data}, 
+		params => ['Associations','Environment']
+	))->relaunch;
 }
 sub history_menu {
 	my $self = shift;
@@ -118,7 +124,6 @@ sub populate {
     $self->SUPER::populate($mode);
 	if ($mode > 1) {
 		Manage::Alias::inject($self);
-		Manage::Assoc::inject($self);
 		Manage::Resolver::inject($self);
 	}
 	$self->pre_select($given[0]);
@@ -127,7 +132,8 @@ sub pre_select {
 	my $self = shift;
 	my $expr = shift;
 	if (_is_value($expr) && !has_dollar($expr)) {
-		my $found = find_assoc($expr);
+		my %data = $self->{data}->();
+		my $found = Settings->find_assoc($data{'assoc'}, $expr);
 		if ($found) {
 			$found = resolve_alias($found);
 			if ($found) {

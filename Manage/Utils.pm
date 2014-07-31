@@ -664,14 +664,14 @@ sub _message {
 	$result
 }
 sub _text_info {
-	my( $title, $text )= @_;
-	my $top = _tkinit 1, $title;
+	my $top = _value_or_else sub{_tkinit(1)}, shift;
+	$top->title(_value_or_else('', shift));
+	my $text = shift;
 	require Tk::ROText;
 	my $txt = $top->Scrolled("ROText", -scrollbars => 'oe');
 	$txt->pack(-side => 'left', -fill => 'both', -expand => 1);
 	$txt->insert('end', $text);
 	_center_window $top;
-	MainLoop
 }
 sub _text_dialog {
 	my $win = _value_or_else sub{_tkinit(1)}, shift;

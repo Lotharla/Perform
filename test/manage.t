@@ -68,12 +68,7 @@ use Manage::Alias qw(
 	resolve_alias 
 	update_alias
 );
-use Manage::Assoc qw(
-	@assoc_file_types 
-	assoc_file_types 
-	find_assoc
-	update_assoc
-);
+use Manage::Settings;
 my $file = "/tmp/test";
 open FILE, ">$file";
 select FILE; # print will use FILE instead of STDOUT
@@ -153,12 +148,12 @@ ok -f $file;
 PersistHash::fetch($acca, $file);
 is_deeply $acca->{"assoc"}, \%assoc, "assoc";
 is_deeply $acca->{"cossa"}, \%cossa, "cossa";	#	32
-Manage::Assoc::inject( assoc => \%assoc );
-is find_assoc('.xxx'), '';
-update_assoc '.xxx', 'XXX';
-isnt find_assoc('.xxx'), '';
-update_assoc '.xxx';
-is find_assoc('.xxx'), '';
+my $aref = \%assoc;
+is 'Settings'->find_assoc($aref, '.xxx'), '';
+'Settings'->modify_setting($aref, '.xxx', 'XXX');
+isnt 'Settings'->find_assoc($aref, '.xxx'), '';
+'Settings'->modify_setting($aref, '.xxx');
+is 'Settings'->find_assoc($aref, '.xxx'), '';
 my @acca = (1,2);
 @_ = _value_or_else(undef, \@acca);
 is_deeply \@_, \@acca;
@@ -196,15 +191,15 @@ ok -f $file;
 {
 	tie my %data, "PersistHash", $file;
 	my @keys = sort keys(%data);
-	is_deeply \@keys, ["__file__","alias","assoc","history","options"];
+	is_deeply \@keys, ["__file__","alias","assoc",'environ',"history","options"];
 	PersistHash::store(\%data, $file);
 	$temp = PersistHash::fetch({}, $file);
 	is_deeply $temp, \%data;	#	50
 }
-assoc_file_types();
-is @assoc_file_types, 6;
-foreach my $type (@assoc_file_types) {
-	is find_assoc($_), @$type[0] foreach @{@$type[1]};
+my @types = @{Settings->apply('Associations', assoc => \%assoc)};
+is @types, 6;
+foreach my $type (@types) {
+	is 'Settings'->find_assoc($aref, $_), @$type[0] foreach @{@$type[1]};
 }
 my %alias = (
 	ant   => "bash /home/lotharla/work/bin/ant-or-make.sh \"\$1\"",

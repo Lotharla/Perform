@@ -5,8 +5,8 @@ no warnings 'experimental';
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(abs_path __FILE__);
-use Manage::ViewComposite;
-(new ViewComposite(
+use Manage::PageComposite;
+(new PageComposite(
 	title => 'Clipper', 
 ))->relaunch;
 

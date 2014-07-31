@@ -19,9 +19,9 @@ use Manage::Resolver qw(
 	@given
 	given_title
 );
-use Manage::ViewComposite;
+use Manage::PageComposite;
 my $params = @given ? \@given : \@ARGV;
-(new ViewComposite(
+(new PageComposite(
 	title => given_title("View files ..."), 
 	width => _getenv('width'),
 	params => $params

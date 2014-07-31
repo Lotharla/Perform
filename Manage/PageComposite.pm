@@ -1,11 +1,10 @@
-package ViewComposite;
+package PageComposite;
 use strict;
 use warnings;
 no warnings 'experimental';
 use feature qw(say switch);
 use Tk;
 use Tk::NoteBook;
-use Clipboard;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(dirname abs_path __FILE__);
@@ -41,8 +40,7 @@ use Manage::Composite;
 our @ISA = qw(Composite);
 sub new {
 	my $class = shift;
-    my $self = $class->SUPER::new(@_);
-	return bless($self, $class);
+    return $class->SUPER::new(@_);
 }
 sub initialize {
     my( $self ) = @_;
@@ -53,14 +51,15 @@ sub initialize {
 		push @files, '';
 		$self->{params} = \@files;
     }
-	$self->{book} = $self->{window}->NoteBook()->pack( -fill=>'both', -expand=>1 );
+	$self->{book} = $self->{window}->NoteBook();
+	$self->{book}->pack(-fill=>'both', -expand=>1);
 	$self->populate($self->mode);
 	_center_window($self->{window});
 }
 sub populate {
 	my $self = shift;
     my $mode = shift;
-    $self->{files} = {};
+    $self->{names} = {};
 	my @params = @{$self->{params}};
     if (@params) {
 		foreach (@params) {
@@ -77,7 +76,7 @@ sub page {
 	my @parts = _fileparse($file);
 	my $label = $parts[0].$parts[2];
 	my $name = _rndstr;
-	$self->{files}->{$name} = $file;
+	$self->{names}->{$name} = $file;
 	my $page = $self->{book}->add($name, 
 		-label => $label, 
 		-raisecmd => sub{} 
@@ -95,10 +94,10 @@ sub page {
 		-label => $labels[0], 
 		-command => [sub {
 			my ($label,$name) = @_;
-			my $file = _ask_file($self->{window}, $label, $self->{files}->{$name}, [], 1);
+			my $file = _ask_file($self->{window}, $label, $self->{names}->{$name}, [], 1);
 			if ($file) {
 				_contents_to_file $file, $text_widget->Contents;
-				$self->{files}->{$name} = $file;
+				$self->{names}->{$name} = $file;
 				my @parts = _fileparse($file);
 				$self->{book}->pageconfigure($name, -label => $parts[0].$parts[2]);
 			}
@@ -109,12 +108,12 @@ sub page {
 		-command => [sub { 
 			my ($label,$name) = @_;
 			$self->{book}->delete($name);
-			my $file = $self->{files}->{$name};
+			my $file = $self->{names}->{$name};
 			if (-f $file) {;
 				my $msg = sprintf "Also delete clip\n'%s'", $file;
 				unlink $file if _question($self->{window}, $msg, $_[0]) eq 'yes'
 			}
-			delete $self->{files}->{$name};
+			delete $self->{names}->{$name};
 			if (!$self->{book}->pages) {
 				$self->{popup} = _create_popup_menu $self->{window};
 				$self->{popup}->add('command', 
@@ -147,13 +146,4 @@ sub page {
 	$widget->insert('end', $text);
 	$self->{book}->raise($name);
 }
-given (_getenv_once('test', 0)) {
-	when (_gt 0) {
-		my $dir = clipdir;
-		my @files = _files_in_dir($dir, 1);
-		(new ViewComposite('title', $dir, 'params', \@files))->relaunch;
-	}
-	default {
-		1
-	}
-}
+1;

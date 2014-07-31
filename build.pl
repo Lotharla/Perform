@@ -23,6 +23,7 @@ use Manage::Utils qw(
 	_setenv
 	_string_contains
 	_perform
+	$_entries
 );
 sub make_targets {
 	my $file = shift;
@@ -107,9 +108,11 @@ sub ant_or_make {
 	@parts > 2 && lc($parts[2]) eq '.xml'
 }
 sub build_tool {
-	ant_or_make(shift) ? 
+	my $file = shift;
+	my $dir = dirname $file;
+	ant_or_make($file) ? 
 		"\$ANT_HOME/bin/ant" : 
-		"make";
+		"make -C \"$dir\"";
 }
 sub build_targets {
 	my $file = shift;
@@ -118,8 +121,8 @@ sub build_targets {
 		make_targets($file);
 }
 sub choice {
-	my $cmd = catfile(dirname(abs_path __FILE__), "entry.pl");
-	$cmd = _combine $cmd, "@_";
+	my $cmd = catfile(dirname(__FILE__), "entry.pl");
+	$cmd .= " @_";
 	`$cmd`
 }
 sub build_command {
@@ -146,9 +149,19 @@ sub build_command {
 	}
 	$output;
 }
-given (_getenv_once('test', 0)) {
+given (_getenv_once('testing', 0)) {
 	when (_gt 1) {
-		my @files = ("/home/lotharla/work/jdk/MathTest/build.xml","/home/lotharla/work/c+plus/Makefile");
+#		_setenv 'ANT_HOME', "/home/lotharla/apache-ant-1.9.4";
+		use Manage::PersistHash;
+		tie my %data, "PersistHash", $_entries;
+		use Manage::Settings;
+		Settings->apply('Environment', %data);
+		Settings->apply('Environment');
+		my @files = (
+			"/home/lotharla/work/jdk/MathTest/build.xml",
+			"/home/lotharla/work/c+plus/Makefile",
+			"/home/lotharla/work/sqlite/extension/sqlite3-pcre/Makefile",
+		);
 		_perform build_command choice @files;
 	}
 	when (_gt 0) {

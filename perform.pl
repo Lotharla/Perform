@@ -65,7 +65,8 @@ if ($command) {
 		}
 		when ('Control') {
 			my $text = _capture_output_2 $command;
-			_text_info $command, $text;
+			_text_info undef, $command, $text;
+			MainLoop;
 		}
 		default {
 			_perform $command
