@@ -9,6 +9,7 @@ use File::Basename qw(dirname basename fileparse);
 use File::Spec::Functions qw(catfile catdir tmpdir);
 use File::Temp;
 use Data::Dump qw(dump pp);
+use IPC::Open3;
 use XML::XML2JSON;
 use Test::More;
 use Tk;
@@ -59,6 +60,8 @@ use Exporter::Easy (
 		_interpolate_rex
 		_subst_rex
 		_flip_hash
+		_clipboard
+		_get_clipboard
 		_persist
 		_implicit
 		_iterate_sorted_values
@@ -68,13 +71,14 @@ use Exporter::Easy (
 		_glob_match
 		_dir_exists
 		_file_exists
+		_make_sure_dir
 		_make_sure_file
 		_contents_to_file
 		_contents_of_file
 		_extract_from
 		_diagnostic
-		_tempFilename
-		_transientFile
+		_temp_filename
+		_transient_file
 		_call
 		_capture_output
 		_check_output
@@ -111,10 +115,10 @@ use Exporter::Easy (
 );
 sub _max ($$) { $_[$_[0] < $_[1]] }
 sub _min ($$) { $_[$_[0] > $_[1]] }
-sub _gt ($) { looks_like_number($_) && $_ > shift }
-sub _lt ($) { looks_like_number($_) && $_ < shift }
 sub _eq ($) { $_ eq shift }
 sub _ne ($) { $_ ne shift }
+sub _gt ($) { looks_like_number($_) && $_ > $_[0] || $_ gt $_[0] }
+sub _lt ($) { looks_like_number($_) && $_ < $_[0] || $_ lt $_[0] }
 sub _win32 {
 	$^O eq 'MSWin32'
 }
@@ -419,16 +423,23 @@ sub _file_exists {
 	my $file = shift;
 	$file && -f $file
 }
+sub _make_sure_dir {
+	my $dir = shift;
+	if (! _dir_exists $dir) {
+		mkdir $dir || die "Can't make directory : $!\n"; 
+	}
+	$dir
+}
 sub _make_sure_file {
 	my $file = shift;
 	unlink $file if shift;
 	if (! _file_exists $file) {
 		my @parts = _fileparse $file;
-		mkdir $parts[1] unless -d $parts[1];
+		_make_sure_dir $parts[1];
 		open my $fh, ">", $file || die "Can't open file : $!\n";
 		close $fh;
 	}
-	return $file;
+	$file
 }
 sub _contents_of_file {
 	my $file = shift;
@@ -442,7 +453,7 @@ sub _contents_of_file {
 	local $/ = undef;    # slurp mode
 	my $contents = <$fh>;
 	close $fh;
-	return $contents;
+	$contents
 }
 sub _contents_to_file {
 	my $file = shift;
@@ -464,26 +475,27 @@ sub _extract_from {
 	my $sep = looks_like_number($_[0]) ? $_separator[$_[0]] : $_[0];
 	return @extract if ! $sep;
 	$sep = _value_or_else $_separator[0], $sep;
-	return join $sep, @extract
+	join $sep, @extract
 }
 sub _diagnostic {
 	my $msg = shift;
-	my $diag = catdir tmpdir, "diag";
+	my $diag = _make_sure_dir catdir(tmpdir, "diag");
 	mkdir $diag unless -d $diag;
 	$diag = new File::Temp( DIR => $diag, UNLINK => 0 );
 	_contents_to_file [$diag,'encoding(UTF-8)'], $msg;
 	$diag
 }
-sub _tempFilename {
+sub _temp_filename {
 	my $template = shift;
 	my $dir = shift;
 	$dir = File::Temp->newdir( CLEANUP => 0 ) if not $dir;
-	mkdir $dir unless -d $dir;
+	$dir = _make_sure_dir $dir;
 	return new File::Temp( TEMPLATE => $template, DIR => $dir, UNLINK => 0 )->filename;
 }
-sub _transientFile {
-#	return "/tmp/test";
-	return new File::Temp( UNLINK => 1 );
+sub _transient_file {
+#	return "/tmp/trans/test";
+	my $dir = _make_sure_dir "/tmp/trans";
+	return new File::Temp( DIR => $dir, UNLINK => 1 );
 }
 sub _call {
 	my $func = shift;
@@ -503,7 +515,7 @@ sub _capture_output {
 	my $func = shift;
 	my $fname = shift;
 	if (!$fname) {
-		$fname = _transientFile->filename;
+		$fname = _transient_file->filename;
 	}
 	my $fhandle;
 	open $fhandle, '>:encoding(UTF-8)', "$fname" || die "Can't open file : $!\n";
@@ -516,15 +528,12 @@ sub _capture_output {
 	return _contents_of_file($fname);
 }
 sub _perform {
-#_diagnostic "@_";
 	exec @_;
 }
 sub _perform_2 {
-	use IPC::Open3;
 	no warnings 'once';
 	my $command = _escapeDoubleQuotes "@_";
 	$command = "perl -e 'exec \"$command\"'";
-#_diagnostic $command;
 	my $pid = open3(\*CHLD_IN, \*CHLD_OUT, \*CHLD_ERR, $command) or die "open3() failed $!";
 	while (<CHLD_OUT>) {
 	    print;
@@ -533,7 +542,7 @@ sub _perform_2 {
 sub _capture_output_2 {
 	my $command = shift;
 	my $dir = "/tmp/out";
-	my $file = _tempFilename 'outXXXX', $dir;
+	my $file = _temp_filename 'outXXXX', $dir;
 	_capture_output [\&_perform_2, $command], $file;
 }
 sub _check_output {
@@ -543,6 +552,22 @@ sub _check_output {
 	foreach my $rg (@rgx) { 
 		ok($output =~ $rg, $output)
 	}
+}
+sub _clipboard {
+	my $set = @_ > 0;
+	my $cmd = sprintf "xclip -selection clipboard -%s", $set ? 'i' : 'o';
+	my $pid = open3(\*CHLD_IN, \*CHLD_OUT, \*CHLD_ERR, "$cmd") or die "open3() failed $!";
+	if ($set) {
+		print CHLD_IN "@_";
+	} else {
+		while (<CHLD_OUT>) {
+		    print;
+		} 
+	}
+	waitpid($pid, 1);
+}
+sub _get_clipboard {
+	_capture_output sub{ _clipboard }
 }
 sub _binsearch (&$\@) {
     my ( $comp, $target, $aref ) = @_;
@@ -678,10 +703,16 @@ sub _text_dialog {
 	my $dim = shift;
 	my $title = shift;
 	my $text = shift;
+	my $buttons = ['OK','Cancel'];
+	given (@_ % 2 ? shift : 0) {
+		when (1) {
+			splice @$buttons, 1, 0, 'To clipboard';
+		}
+	}
 	my %menu_items = @_;
 	my $dlg = $win->DialogBox(
 		-title => $title,
-		-buttons => ['OK', 'Cancel']);
+		-buttons => $buttons);
 	$dlg->bind('<KeyPress-Return>', sub {});
 	my $text_widget = sub {
 		my $parent = shift;
@@ -709,10 +740,11 @@ sub _text_dialog {
 		}
 		$text_widget
 	};
+	my $book;
 	my @widgets;
 	if (_is_array_ref $text) {
 		use Tk::NoteBook;
-		my $book = $dlg->NoteBook()->pack( -fill=>'both', -expand=>1 );
+		$book = $dlg->NoteBook()->pack( -fill=>'both', -expand=>1 );
 		my $i = 0;
 		foreach (_array($text)) {
 			my $widget;
@@ -726,16 +758,25 @@ sub _text_dialog {
 	} else {
 		push @widgets, &$text_widget($dlg, $text);
 	}
-	my $result = $dlg->Show;
-	if ($result && $result eq 'OK') { 
-		if (_is_array_ref $text) {
-			my $i = 0;
-			foreach (@widgets) {
-				$text->[$i++] = $_->Contents;
-			}
-			return 1
+show:
+	given ($dlg->Show) {
+		when ('To clipboard') {
+			my $page = $book->page_widget($book->raised);
+			my @kids = $page->children;
+			my $text_widget = $kids[0]->Subwidget('scrolled');
+			_clipboard $text_widget->getSelected();
+			goto show
 		}
-		return [$dlg->cget(-title), $widgets[0]->Contents]
+		when ('OK') {
+			if (_is_array_ref $text) {
+				my $i = 0;
+				foreach (@widgets) {
+					$text->[$i++] = $_->Contents;
+				}
+				return 1
+			}
+			return [$dlg->cget(-title), $widgets[0]->Contents]
+		}
 	}
 	undef
 }

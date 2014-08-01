@@ -15,7 +15,6 @@ use Manage::Utils qw(
 	_escapeDoubleQuotes
 	_getenv 
 	_value_or_else 
-	_tempFilename
 	_capture_output
 	_perform
 	_perform_2
@@ -42,15 +41,25 @@ my $command = _capture_output(
 			file => $_entries,
 			extendMenu => sub {
 				my ($self, $menu) = @_;
-				my $submenu = $menu->cascade(-label=>'Run', -underline=>0, -tearoff => 'no')->cget('-menu');
-				$submenu->radiobutton(-label=>"in terminal", -command => sub{ $self->{modifier} = 'Alt' });
-				$submenu->radiobutton(-label=>"capture output", -command => sub{ $self->{modifier} = 'Control' });
+				my ($submenu, $value);
+				$submenu = $menu->cascade(-label=>'Run', -underline=>0, -tearoff => 'no', 
+					-postcommand => sub {
+						$value = _value_or_else ' ', $self->{modifier};
+					}
+				)->cget('-menu');
+				$submenu->radiobutton(-label=>"in terminal", -value => 'Alt', 
+					-variable => \$value, -command => sub{ $self->{modifier} = 'Alt' });
+				$submenu->radiobutton(-label=>"capture output", -value => 'Control', 
+					-variable => \$value, -command => sub{ $self->{modifier} = 'Control' });
+				$submenu->radiobutton(-label=>"normal", -value => ' ', 
+					-variable => \$value, -command => sub{ $self->{modifier} = ' ' });
 			}
 		);
 		$obj->relaunch;
 		$modifier = $obj->{modifier};
 	}
 );
+exit if ! $command;
 sub terminalize {
 	my $terminal = _chomp(`gconftool-2 -g /desktop/gnome/applications/terminal/exec`);
 	my $output = _flatten $_[0];
@@ -58,19 +67,17 @@ sub terminalize {
 	$output = "bash -c '" . $output . " | less'";
 	return _combine( "$terminal", "-t", sprintf("\"%s\"", $output), "-e", "\"$output\"" );
 }
-if ($command) {
-	given ($modifier) {
-		when ('Alt') {
-			_perform terminalize($command)
-		}
-		when ('Control') {
-			my $text = _capture_output_2 $command;
-			_text_info undef, $command, $text;
-			MainLoop;
-		}
-		default {
-			_perform $command
-		}
+given ($modifier) {
+	when ('Alt') {
+		_perform terminalize $command
+	}
+	when ('Control') {
+		my $text = _capture_output_2 $command;
+		_text_info undef, $command, $text;
+		MainLoop;
+	}
+	default {
+		_perform $command
 	}
 }
 

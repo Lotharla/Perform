@@ -27,8 +27,9 @@ use Manage::Resolver qw(
 	resolve_dollar
 );
 use Manage::Alias qw(
+	ask_alias
 	resolve_alias
-	install_menu_button
+	install_alias_button
 );
 use Manage::Settings;
 use Manage::EntryComposite;
@@ -49,10 +50,11 @@ sub initialize {
     my( $self ) = @_;
     $self->SUPER::initialize();
 	my %data = $self->{data}->();
+    Settings->apply('Associations', %data);
     Settings->apply('Environment', %data);
     my $menu = _menu($self->{window});
 	my $submenu;
-	$submenu = install_menu_button($menu, 'Alias', sub { 
+	$submenu = install_alias_button($menu, 'Alias', sub { 
 		my ($path, $value) = @_; 
 		$self->item($value) if $value;
 		_set_selection($self->{entry});
@@ -62,13 +64,16 @@ sub initialize {
 		sub {
 			my $dollar = has_dollar($self->item);
 			my $given = @given > 0;
-			$submenu->entryconfigure(0, -state => $given ? 'normal' : 'disabled');
-			$submenu->entryconfigure(1, -state => $given && $dollar ? 'normal' : 'disabled');
-			$submenu->entryconfigure(2, -state => $dollar ? 'normal' : 'disabled');
+			$submenu->entryconfigure(1, -state => $given ? 'normal' : 'disabled');
+			$submenu->entryconfigure(2, -state => $given && $dollar ? 'normal' : 'disabled');
+			$submenu->entryconfigure(3, -state => $dollar ? 'normal' : 'disabled');
+		}, 
+		"Alias ...", sub {
+			ask_alias
 		}, 
 		"Given ...", sub {
 			my @dim = $self->dimension("text");
-			if (_text_dialog $self->{window}, \@dim, "Given", \@given) {
+			if (_text_dialog $self->{window}, \@dim, "Given", \@given, 1) {
 				my @parts = split /$_separator[0]/, $self->{window}->title;
 				$self->{window}->title(given_title $parts[0]);
 			}
@@ -147,7 +152,7 @@ sub pre_commit {
 	my $self = shift;
 	my $output = $self->item;
 	if (has_dollar($output)) {
-		$output = resolve_dollar($output, assoc_file_types(), @_);
+		$output = resolve_dollar($output, Settings->apply('Associations'), @_);
 		return 0 if ! $output;
 	}
 	$self->item($output);

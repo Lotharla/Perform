@@ -418,7 +418,7 @@ sub commit {
 	print $output;
     $self->SUPER::commit();
 }
-given (_getenv_once('test', '')) {
+given (_getenv_once('test', 0)) {
 	when (_gt 1) {
 		my $ec = new EntryComposite('file', $_entries, 'label', '<<--History-->>');
 		relaunch $ec;
@@ -430,19 +430,19 @@ given (_getenv_once('test', '')) {
 		$ec->give(cwd());
 		relaunch $ec;
 	}
-	when (_lt -1) {
-		my $ec = new EntryComposite('file', $_entries, 'label', '<<--History-->>');
+	when (_lt 0) {
+		my $ec = new EntryComposite('title', 'Environment', 'label', 'Current');
+		$ec->give(cwd());
 		relaunch $ec;
 	}
-	when (_lt 0) {
+	when (_lt -1) {
 		my @paths = sort split( /:/, $ENV{PATH});
 		my $ec = new EntryComposite('title', 'Environment', 'label', 'path', 'params', \@paths);
 		$ec->give(cwd());
 		relaunch $ec;
 	}
-	when (_eq 0) {
-		my $ec = new EntryComposite('title', 'Environment', 'label', 'Current');
-		$ec->give(cwd());
+	when (_lt -2) {
+		my $ec = new EntryComposite('file', $_entries, 'label', '<<--History-->>');
 		relaunch $ec;
 	}
 	default {

@@ -28,12 +28,16 @@ use Manage::Utils qw(
 	_value_or_else 
 	_interpolate_rex
 	_rndstr
+	_clipboard
+	_get_clipboard
+	_capture_output
 	_tkinit 
 	_set_selection 
 	_replace_text 
 	_files_in_dir
 	_file_types 
 	_file_exists
+	_make_sure_dir
 	_contents_of_file
 	_contents_to_file
 	_ask_file 
@@ -56,6 +60,7 @@ use Exporter::Easy (
 		has_dollar
 		is_dollar
 		dollar_amount
+		dollar_attr
 		make_dollar
 		make_value
 		detect_dollar
@@ -83,9 +88,7 @@ sub given_title {
 	$title
 }
 sub clipdir {
-	my $dir = catdir tmpdir, "clip";
-	mkdir $dir if ! -d $dir;
-	$dir
+	_make_sure_dir catdir(tmpdir, "clip")
 }
 sub next_clip {
 	my $dir = clipdir;
@@ -101,9 +104,11 @@ sub get_clip {
 	my $win = shift;
 	my $file = shift;
 	Tk::catch {
-		_file_exists($file) ? 
-			_contents_of_file($file) : 
-			$win->clipboardGet;
+		if (_file_exists($file)) { 
+			_contents_of_file($file)
+		} else { 
+			_get_clipboard
+		}
 	};
 }
 my %dollars;
@@ -122,6 +127,11 @@ sub dollar_amount {
 	_is_value($1) ? 
 		$1 : 
 		($3?[$2,$4]:$2)
+}
+sub dollar_attr {
+	my $amount = dollar_amount $_[0];
+	_is_array_ref($amount) ?
+		$amount->[1] : ''
 }
 sub make_dollar {
 	my $amount = shift;
@@ -225,20 +235,22 @@ sub clip_menu {
 	my $title = shift;
 	my $entry = shift;
 	my $btn = shift;
+	my $command = shift;
 	my $dir = clipdir;
-	my @files = _files_in_dir($dir);
-	my $command = sub {
+	$command = sub {
 		my $repl = catfile $dir, $_[0];
 		_replace_text($entry, $repl, 1)
-	};
+	} if ! $command;
+	my @files = _files_in_dir($dir);
+	@files = sort @files;
 	if ($btn) {
 		_refresh_menu_button_items $win, $title, $btn, 
 			$command, 
-			sort @files;
+			@files;
 	} else {
 		$btn = _install_menu_button $win, $title, sub {}, 
 			$command, 
-			sort @files;
+			@files;
 	}
 	$btn
 }
@@ -271,7 +283,7 @@ sub resolve_dollar {
 		)->pack(-side => 'top', -fill=>'x', -expand=>1);
 		my $frm = $page->Frame()->pack(-side => 'bottom', -fill=>'x', -expand=>1);
 		my ($row,$col) = (0,0);
-		my $choice = 'f';
+		my $choice = dollar_attr($key) eq 'dir' ? 'd' : 'f';
 		$frm->Button( 
 			-text => 'Browse...', 
 			-command => sub { 
@@ -295,8 +307,19 @@ sub resolve_dollar {
 		my $btn = _install_menu_button $frm, 'Given', sub{}, 
 			sub{_replace_text($en, $_[0], 1)}, @given;
 		$btn->grid(-row => $row, -column => $col++);
-		$btn = clip_menu $frm, 'Clips', $en; 
+		my $contents = 0;
+		my $clip_command = sub {
+			my $repl = catfile clipdir, $_[0];
+			_replace_text($en, 
+				$contents ? _contents_of_file $repl : $repl, 
+				1)
+		};
+		$btn = clip_menu $frm, 'Clips', $en, undef, $clip_command; 
 		$btn->grid(-row => $row, -column => $col++);
+		$frm->Checkbutton(
+			-text => 'contents',
+			-onvalue => 1, -offvalue => 0, 
+			-variable => \$contents)->grid(-row => $row, -column => $col++);
 =pod
 		$frm->Button( 
 			-text => 'Add clip', 

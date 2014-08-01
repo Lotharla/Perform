@@ -22,6 +22,7 @@ use Manage::Utils qw(
 	_split_on_whitespace 
 	_value_or_else 
 	_is_value
+	_is_array_ref
 	_surround
 	_getenv
 	_setenv
@@ -36,7 +37,7 @@ use Manage::Utils qw(
 	_file_exists
 	_dir_exists
 	_files_in_dir
-	_transientFile 
+	_transient_file 
 	_file_types 
 	_contents_of_file
 	_make_sure_file
@@ -54,9 +55,13 @@ use Manage::Utils qw(
 	_call
 	_array
 	_hash
+	_clipboard
+	_get_clipboard
+	_gt _lt
 );
 use Manage::Resolver qw(
-	is_dollar has_dollar dollar_amount make_dollar 
+	is_dollar has_dollar dollar_amount dollar_attr
+	make_dollar 
 	make_value
 	get_dollars set_dollars detect_dollar 
 	@given 
@@ -142,7 +147,7 @@ is _value_or_else('', 'x', \%_), '';
 my %cossa = _flip_hash(\%assoc);
 my $acca = { assoc => \%assoc, cossa => \%cossa };
 #say pp($acca);
-$file = _transientFile();
+$file = _transient_file();
 PersistHash::store($acca, $file);
 ok -f $file;
 PersistHash::fetch($acca, $file);
@@ -239,7 +244,7 @@ if (%history) {
 	}
 }
 my $now = _now;
-$file = _transientFile();
+$file = _transient_file();
 sub closure {
 	tie my %data, "PersistHash", $file;
 	$data{'history'} = {};
@@ -329,7 +334,6 @@ ok _dir_exists $dir;
 @parts = _array \@files;
 is_deeply \@parts, \@files;
 sub _dump { 
-#	dump(@_);
 	@_
 }
 my $p = \&_dump;
@@ -350,7 +354,14 @@ ok _string_contains make_value($a,'x'), $_separator[2];
 @_ = devels
 ok @_ > 1;
 is place_given("\$1", @_), $_[0];
+_clipboard $didnt;
+is _get_clipboard, $didnt;
+ok !has_dollar($_) && !is_dollar($_) && !dollar_amount($_) && !dollar_attr($_) for '$ANT_HOME';
+ok has_dollar($_) && is_dollar($_) && dollar_amount($_)==42 && !dollar_attr($_) for '$42';
+ok has_dollar($_) && !is_dollar($_) && dollar_amount($_)==42 && !dollar_attr($_) for '$42:answer';
+ok has_dollar($_) && is_dollar($_) && _is_array_ref(dollar_amount $_) && dollar_attr($_) for '${42:answer}';
+ok _lt '42' for '33';
+ok _gt '42' for '_33';
 =pod
 =cut
 exit;
-

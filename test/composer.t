@@ -20,6 +20,7 @@ use Manage::Utils qw(
 	_rndstr
 	_make_sure_file
 	_check_output
+	_get_clipboard
 	$_entries
 	_tkinit
 	_text_dialog
@@ -104,12 +105,12 @@ set_given;
 }
 {
 	my $win = _tkinit(0);
-	my $canvas = $win->Scrolled('Canvas', -width => 300, -height => 300);
-	_text_dialog $win, [20,2], "Given", \@given;
-	my $i = 0;
-	$canvas->createText(100, 100*($i++) + 10, -text => $_) foreach @given;
+	_text_dialog $win, [20,3], "Given", \@given, 1;
+	my $canvas = $win->Scrolled('Canvas', -width => 300, -height => 400);
+	my $i;
+	$canvas->createText(100, 10+100*($i++), -text => $_) foreach (@given, _get_clipboard);
 	$canvas->pack;
 	MainLoop();
 }
-=pod
+=pod1.xxx
 =cut

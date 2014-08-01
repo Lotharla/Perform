@@ -39,8 +39,8 @@ use Exporter::Easy (
 		resolve_alias
 		update_alias
 		ask_alias
-		install_menu_button
-		install_popup_button
+		install_alias_button
+		install_alias_popup_button
 	)],
 );
 my ($obj, $window, %data);
@@ -144,9 +144,13 @@ sub ask_alias {
 		-variable => \$path
 	)->grid(-row => 0, -column => 1);
 	$dlg->Label( -text => 'Value' )->grid(-row => 1, -column => 0);
+	my @dim = (50,5);
+	if (! $path && UNIVERSAL::can($obj,'dimension')) {
+		@dim = $obj->dimension("alias-text");
+	}
 	$en = $dlg->Entry( 
 		-takefocus => 1,
-		-width => 50,
+		-width => $dim[0],
 		-textvariable => \$value
 	)->grid(-row => 1, -column => 1);
 	_set_selection($en);
@@ -211,20 +215,22 @@ sub cancel_popup {
 	undef $popup if $popup; 
 }
 my $modify = 0;
-sub create_menu {
-	my( $menu, $name, $func )= @_;
-	$menu->add('checkbutton', 
-		-label => 'modify', 
-		-onvalue => 1, -offvalue => 0, 
-		-variable => \$modify,
-		-command => sub { 
-			if ($modify) {
-				ask_alias "", "";
+sub create_alias_menu {
+	my( $menu, $name, $func, $modcheck )= @_;
+	if ($modcheck) {
+		$menu->add('checkbutton', 
+			-label => 'modify', 
+			-onvalue => 1, -offvalue => 0, 
+			-variable => \$modify,
+			-command => sub { 
+				if ($modify) {
+					ask_alias "", "";
+				}
+				cancel_popup; 
 			}
-			cancel_popup; 
-		}
-	);
-	$menu->separator;
+		);
+		$menu->separator;
+	}
 	cascades $menu, $name, sub { 
 		my ($path, $value) = @_;
 		if ($modify) {
@@ -234,7 +240,7 @@ sub create_menu {
 		cancel_popup;
 	};
 }
-sub install_menu_button {
+sub install_alias_button {
 	my ($menu, $label, $func) = @_;
 	my $btn;
 	$btn = $menu->Menubutton(
@@ -242,7 +248,7 @@ sub install_menu_button {
 		-tearoff => 0,
 		-postcommand => sub {
 			$btn->menu->delete(0, 'end');
-			create_menu $btn->menu, '', $func
+			create_alias_menu $btn->menu, '', $func
 		}
 	);
 	$btn
@@ -254,11 +260,11 @@ sub toggle_popup {
 		cancel_popup;
 	} else {
 		$popup = $window->Menu(-tearoff => 0);
-		create_menu $popup, '', $func;
+		create_alias_menu $popup, '', $func, 1;
 		$popup->post($window->x() + $widget->x(), $window->y() + $widget->y() + $widget->height)
 	}
 }
-sub install_popup_button {
+sub install_alias_popup_button {
 	my ($label, $func) = @_;
 	my $btn;
 	$btn = $window->Button(
@@ -271,7 +277,7 @@ given (_getenv_once('test', 0)) {
 	when (_gt 2) {
 		tie %data, "PersistHash", $_entries;
 		$window = _tkinit(0);
-		install_popup_button('Alias', sub { say pp @_ })->pack;
+		install_alias_popup_button('Alias', sub { say pp @_ })->pack;
 		_center_window ($window);
 		MainLoop();
 	}
@@ -281,7 +287,7 @@ given (_getenv_once('test', 0)) {
 		tie %data, "PersistHash", $file;
 		inject(%data);
 		$window = _tkinit(0);
-		install_menu_button(_menu($window), 'Alias', sub { say pp @_ });
+		install_alias_button(_menu($window), 'Alias', sub { say pp @_ });
 		_center_window ($window);
 		MainLoop();
 		dump \%data;
@@ -309,7 +315,7 @@ given (_getenv_once('test', 0)) {
 	when (_lt -1) {
 		Manage::Resolver::inject({window => _tkinit(1)});
 		push @given, "/tmp/clip", "*", ".*";
-		my $input = "find \${1:dir} -name \"\${GLOB}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
+		my $input = "find \${1:dir} -name \"\${2:file}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
 #		say place_given($input);
 		say resolve_dollar($input, [["No files", '']]);
 	}
