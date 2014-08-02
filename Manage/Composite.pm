@@ -31,7 +31,6 @@ sub initialize {
 	my $title = _value_or_else('', $self->{title});
 	$self->{window} = _value_or_else(sub{_tkinit(0, $title)}, $self->{window});
 	$self->{window}->bind('<KeyPress-Escape>', sub {$self->cancel});
-	$self->{window}->bind('<KeyPress-Return>', sub {$self->commit});
 }
 sub file { $_[0]->{file}=$_[1] if defined $_[1]; $_[0]->{file} }
 sub data {

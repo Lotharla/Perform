@@ -151,7 +151,6 @@ sub build_command {
 }
 given (_getenv_once('testing', 0)) {
 	when (_gt 1) {
-#		_setenv 'ANT_HOME', "/home/lotharla/apache-ant-1.9.4";
 		use Manage::PersistHash;
 		tie my %data, "PersistHash", $_entries;
 		use Manage::Settings;

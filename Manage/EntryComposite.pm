@@ -63,6 +63,7 @@ sub initialize {
 	}
 	($self->{width}, $self->{height}) = $self->dimension('list');
 	$self->top($self->{listmode});
+	$self->{window}->bind('<KeyPress-Return>', sub {$self->commit});
 	$self->{window}->bind('<KeyPress-Up>', sub {$self->move_entry(-1)});
 	$self->{window}->bind('<KeyPress-Down>', sub {$self->move_entry(+1)});
 	if ($self->use_history) {
@@ -135,10 +136,10 @@ sub bottom {
 	my %buttons = (
 		ok => $bottom->
 			Button(-text => 'OK', -command => sub { $self->commit })->
-				pack(-side => "left", -expand=>1),
+				grid(-row => 0, -column => 0, -padx => 10, -pady => 5),
 		cancel => $bottom->
 			Button(-text => 'Cancel', -command => sub { $self->cancel })->
-				pack(-side => "left", -expand=>1),
+				grid(-row => 0, -column => 1, -padx => 10, -pady => 5),
 	);
 	$self->{window}->bind('<Alt-Return>', sub { $self->{modifier} = 'Alt'; $buttons{'ok'}->invoke });
 	$self->{window}->bind('<Control-Return>', sub { $self->{modifier} = 'Control'; $buttons{'ok'}->invoke });
