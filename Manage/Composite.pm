@@ -42,10 +42,13 @@ sub data {
 		%data
 	};
 }
+sub use_file {
+	$_[0]->{file} && length($_[0]->{file}) > 0
+}
 sub mode {
 	my $self = shift;
 	my $mode = 0;
-	if (_file_exists($self->file)) {
+	if ($self->use_file) {
 		$self->{data} = $self->data();
 		$mode = 2
 	} elsif (exists $self->{params}) {

@@ -24,7 +24,7 @@ use Manage::Utils qw(
 	_question
 	_create_popup_menu
 	_install_menu
-	$_entries
+	$_entries $_history
 );
 use Manage::PersistHash;
 use Manage::Composite;
@@ -37,10 +37,12 @@ sub data {
 	my $self = shift;
 	my $func = shift;
 	return $self->SUPER::data(sub {
-		$_[0]->{'history'} = _value_or_else({}, 'history', $_[0]);
 		$_[0]->{'options'} = _value_or_else({}, 'options', $_[0]);
 		_call [$func, $_[0]];
 	});
+}
+sub use_history {
+	$_[0]->{history_db} && length($_[0]->{history_db}) > 0
 }
 sub listmode {
 	my ($self,$listmode) = @_;
@@ -144,9 +146,6 @@ sub bottom {
 	$self->{window}->bind('<Alt-Return>', sub { $self->{modifier} = 'Alt'; $buttons{'ok'}->invoke });
 	$self->{window}->bind('<Control-Return>', sub { $self->{modifier} = 'Control'; $buttons{'ok'}->invoke });
 }
-sub use_history {
-	$_[0]->{mode} > 1
-}
 sub history_menu {
 	my $self = shift;
 	my $menu = shift;
@@ -236,33 +235,35 @@ sub populate {
 		}
 		@items
 	};
-	if ($mode == 1) {
-		$self->{items}->($self->{params});
-	} else {
+	if ($self->use_history) {
+		tie my %data, "PersistHash", $self->{history_db}, 1;
+		$self->{hist} = sub { %data };
 		$self->history('');
 		$self->set_point_in_time($self->item);
+	} else {
+		$self->{items}->($self->{params});
 	}
 }
 sub history {
     my $self = shift;
 	my $key = shift;
 	my $value = shift;
-	my %data = $self->{data}->();
+	my %data = $self->{hist}->();
 	if (defined $key) {
 		if ($key) {
 			if (!defined $value) {
-				return $data{'history'}->{$key};
+				return $data{hash}->{$key};
 			} elsif ($value) {
-				$data{'history'}->{$key} = $value;
+				$data{hash}->{$key} = $value;
 			} else {
-				delete $data{'history'}->{$key};
+				delete $data{hash}->{$key};
 			}
 		}
-		my %history = %{$data{'history'}};
+		my %history = %{$data{hash}};
 		my @history = sort values %history;
 		$self->{items}->(\@history);
 	}
-	return %{$data{'history'}};
+	return %{$data{hash}};
 }
 sub selection {
     my $self = shift;
@@ -310,16 +311,18 @@ sub timeline {
 	my %history = $self->history;
 	return sort {$a <=> $b} keys %history
 }
-sub get_pointer_on_timeline {
+sub get_index_on_timeline {
     my $self = shift;
 	my $item = shift;
 	if ($item) {
 		my %history = $self->history;
-		my $ptr = 0;
+		my $index = 0;
 		foreach (@_) {
 			my $it = $history{$_};
-			return $ptr if $it eq $item;
-			$ptr++;
+			if ($it eq $item) {
+				return $index;
+			}
+			$index++;
 		}
 	}
 	-1
@@ -328,9 +331,9 @@ sub get_point_in_time {
     my $self = shift;
 	my @timeline = $self->timeline;
 	return -2 if @timeline < 1;
-	my $ptr = $self->get_pointer_on_timeline(shift, @timeline);
-	$ptr > -1 ? 
-		$timeline[$ptr] : 
+	my $index = $self->get_index_on_timeline(shift, @timeline);
+	$index > -1 ? 
+		$timeline[$index] : 
 		-1
 }
 sub set_point_in_time {
@@ -409,6 +412,14 @@ sub change_history {
 		$self->update_list;
 	}
 }
+sub save {
+	my $self = shift;
+	if ($self->{hist}) {
+		my %data = $self->{hist}->();
+		PersistHash::DESTROY \%data;     
+	}
+    $self->SUPER::save();
+}
 sub commit {
 	my $self = shift;
 	my $item = $self->item;
@@ -421,13 +432,13 @@ sub commit {
 }
 given (_getenv_once('test', 0)) {
 	when (_gt 1) {
-		my $ec = new EntryComposite('file', $_entries, 'label', '<<--History-->>');
+		my $ec = new EntryComposite('file', $_entries, 'history_db', $_history, 'label', '<<--History-->>');
 		relaunch $ec;
 	}
 	when (_gt 0) {
 		my @paths = sort split( /:/, $ENV{PATH});
 		my $ec = new EntryComposite('title', 'Environment', 'label', 'PATH', 'params', \@paths, 
-			'options', {"list-multiple" => 0});
+			'options', {"list-multiple" => 1});
 		$ec->give(cwd());
 		relaunch $ec;
 	}
@@ -443,7 +454,7 @@ given (_getenv_once('test', 0)) {
 		relaunch $ec;
 	}
 	when (_lt -2) {
-		my $ec = new EntryComposite('file', $_entries, 'label', '<<--History-->>');
+		my $ec = new EntryComposite('file', $_entries, 'history_db', $_history, 'label', '<<--History-->>');
 		relaunch $ec;
 	}
 	default {

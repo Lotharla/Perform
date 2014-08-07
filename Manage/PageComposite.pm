@@ -26,6 +26,7 @@ use Manage::Utils qw(
 	_contents_to_file
 	_center_window
 	_ask_file
+	_implicit
 	_question
 	_rndstr
 	_create_popup_menu
@@ -73,6 +74,7 @@ sub page {
 	my $self = shift;
 	my $file = shift;
 	$file = _file_exists($file) ? $file : next_clip;
+	_implicit "file", $file if $file;
 	my @parts = _fileparse($file);
 	my $label = $parts[0].$parts[2];
 	my $name = _rndstr;

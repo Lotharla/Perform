@@ -40,6 +40,7 @@ use Manage::Utils qw(
 	_transient_file 
 	_file_types 
 	_contents_of_file
+	_contents_to_file
 	_make_sure_file
 	_tkinit 
 	_ask_file
@@ -50,7 +51,7 @@ use Manage::Utils qw(
 	_string_contains
 	_rndstr
 	_index_of
-	$_entries
+	$_entries $_history
 	_diagnostic
 	_call
 	_array
@@ -74,7 +75,7 @@ use Manage::Alias qw(
 	update_alias
 );
 use Manage::Settings;
-my $file = "/tmp/test";
+my $file = catfile tmpdir, "test";
 open FILE, ">$file";
 select FILE; # print will use FILE instead of STDOUT
 say "Hello, world"; # goes to FILE
@@ -105,10 +106,10 @@ is @parts, 2;
 ok $parts[0] =~ /^A.$/;
 ok $parts[1] =~ /^B/;
 ok $parts[1] =~ /c$/;
-my $didnt = "I didn't do it";
+my ($doh,$didnt) = ("D'oh","I didn't do it");
 @parts = _split_on_whitespace($didnt, 0);
 is @parts, 4;
-my %samples = ( 11 => "\$11", '2:dir' => "\${2:dir}", "D'oh" => "\${D'oh}", $didnt => "\${$didnt}", );
+my %samples = ( 11 => "\$11", '2:dir' => "\${2:dir}", $doh => "\${$doh}", $didnt => "\${$didnt}", );
 is make_dollar($_), $samples{$_}, _surround(['_','_'],$_) foreach keys %samples;
 foreach (values %samples) { 
 	ok(has_dollar($_) && is_dollar($_), $_) if !_has_whitespace($_) and index($_, "'") < 0 
@@ -196,7 +197,7 @@ ok -f $file;
 {
 	tie my %data, "PersistHash", $file;
 	my @keys = sort keys(%data);
-	is_deeply \@keys, ["__file__","alias","assoc",'environ',"history","options"];
+	is_deeply \@keys, ["__file__","alias","assoc",'environ',"options"];
 	PersistHash::store(\%data, $file);
 	$temp = PersistHash::fetch({}, $file);
 	is_deeply $temp, \%data;	#	50
@@ -244,22 +245,24 @@ if (%history) {
 	}
 }
 my $now = _now;
-$file = _transient_file();
-sub closure {
-	tie my %data, "PersistHash", $file;
-	$data{'history'} = {};
-	return sub {
-		%data = @_ if defined $_[0];
-		%data
-	};
+{
+	$file = _transient_file();
+	sub closure {
+		tie my %data, "PersistHash", $file;
+		$data{'history'} = {};
+		return sub {
+			%data = @_ if defined $_[0];
+			%data
+		};
+	}
+	my $closure = closure();
+	my %data = $closure->();
+	ok exists($data{'history'});
+	$data{'history'}->{$now} = 'bla';
+	ok exists($data{'history'}->{$now});
+	my %data2 = $closure->();
+	is $data2{'history'}->{$now}, 'bla';
 }
-my $closure = closure();
-my %data = $closure->();
-ok exists($data{'history'});
-$data{'history'}->{$now} = 'bla';
-ok exists($data{'history'}->{$now});
-my %data2 = $closure->();
-is $data2{'history'}->{$now}, 'bla';
 is _flatten("1\n2\t3"), "1 2 3";
 is _combine('1',(2,3)), "1\t2\t3";
 ok !_is_value(undef);
@@ -362,6 +365,31 @@ ok has_dollar($_) && !is_dollar($_) && dollar_amount($_)==42 && !dollar_attr($_)
 ok has_dollar($_) && is_dollar($_) && _is_array_ref(dollar_amount $_) && dollar_attr($_) for '${42:answer}';
 ok _lt '42' for '33';
 ok _gt '42' for '_33';
+$file = catfile tmpdir, ".history";
+unlink $file;
+{
+	tie my %data, "PersistHash", $file, 1;
+	my @keys = sort keys(%data);
+	is_deeply \@keys, ["__file__","hash"];
+	$now = _now;
+	$data{hash}->{$now} = $doh;
+	$data{hash}->{1+$now} = $didnt;
+	PersistHash::store(\%data, $file);
+	$temp = PersistHash::fetch({}, $file);
+	is_deeply $temp->{hash}, $data{hash};
+	delete $data{hash}->{1+$now};
+	$data{hash}->{2+$now} = $words;
+	$data{hash}->{$now} = $didnt;
+	PersistHash::store(\%data, $file);
+	$temp = PersistHash::fetch({}, $file);
+	is_deeply $temp->{hash}, $data{hash};
+}
 =pod
+{
+	tie my %data, "PersistHash", $_history, 1;
+	tie my %data2, "PersistHash", $_entries;
+	my %history = %{$data2{'history'}};
+	$data{$_} = $history{$_} foreach keys %history;
+}
 =cut
 exit;

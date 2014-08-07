@@ -8,6 +8,7 @@ use feature qw(say switch);
 use File::Basename qw(dirname);
 use Cwd qw(abs_path cwd);
 use lib dirname(dirname abs_path __FILE__);
+use Manage::PersistHash;
 use Manage::Utils qw(
 	dump pp
 	_gt _lt _eq _ne
@@ -21,7 +22,7 @@ use Manage::Utils qw(
 	_make_sure_file
 	_check_output
 	_get_clipboard
-	$_entries
+	$_entries $_history
 	_tkinit
 	_text_dialog
 );
@@ -38,7 +39,6 @@ use Manage::Resolver qw(
 use Manage::Composer;
 given (_value_or_else(0, _getenv('testing'))) {
 	when (_ne 0) {
-#		$ENV{'given'} = "/home/lotharla/work/perl\n/home/lotharla/work/bin/test.sh\nabc";
 		my $composer = new Composer( 
 			title => "Testing",
 			label => '<<-->>',
@@ -48,35 +48,39 @@ given (_value_or_else(0, _getenv('testing'))) {
 		exit
 	}
 }
+#goto here;
 my $glob = '*.xxx';
 my $alias = _rndstr 8, 'a'..'z', 0..9;
 my $ntd = _combine('nothing to do', "\$1");
-my $str = reverse $alias;
-my $temp = '/tmp/.entries';
-ok _make_sure_file($temp, 1);
+my $dtn = reverse $alias;
+my ($entr,$hist) = ('/tmp/.entries', '/tmp/.history');
+unlink $entr,$hist;
 {
 	my $composer = new Composer(
-		file => $temp, 
+		file => $entr, 
+		history_db => $hist, 
 	);
 	my %data = $composer->{data}->();
 	my @keys = sort keys %data;
-	is_deeply \@keys, ["__file__","alias","assoc","environ","history","options"];
+	is_deeply \@keys, ["__file__","alias","assoc","environ","options"];
 	'Settings'->modify_setting($data{'assoc'}, $glob, $alias);
 	update_alias $alias, $ntd;
-	$composer->give($str);
+	$composer->give($dtn);
 	$composer->change_history('add');
 	$composer->cancel;
 }
-tie my %data, "PersistHash", $temp;
+tie my %data, "PersistHash", $entr;
 is $data{'assoc'}->{$glob}, $alias;
 is $data{'alias'}->{$alias}, $ntd;
-my @history = values %{$data{'history'}};
-ok _array_contains(\@history, $str);
+tie %data, "PersistHash", $hist, 1;
+my @history = values %{$data{'hash'}};
+ok _array_contains(\@history, $dtn);
 _setenv 'given', "1.xxx\n2.yyy\n3.zzz";
 set_given;
 {
 	my $composer = new Composer(
-		file => $temp, 
+		file => $entr, 
+		history_db => $hist, 
 	);
 	my $item = $composer->item;
 	ok $composer->is_new_entry($item);
@@ -86,19 +90,22 @@ set_given;
 	ok ! $composer->is_new_entry($composer->item);
 	$composer->cancel;
 }
+here:
 {
 	my $composer = new Composer(
 		file => $_entries, 
+		history_db => $_history, 
 	);
 	my %history = $composer->history;
 	my @timeline = $composer->timeline;
 #	say $history{$_} foreach @timeline;
 	my @pointers;
 	foreach (values %history) {
-		my $ptr = $composer->get_pointer_on_timeline($_, @timeline);
-		push @pointers, $ptr;
+		my $index = $composer->get_index_on_timeline($_, @timeline);
+		push @pointers, $index;
 	}
-	ok !_duplicates(@pointers);
+	my @duplicates = _duplicates(@pointers);
+	ok !@duplicates;
 	@pointers = sort {$a<=>$b} @pointers;
 	is $#pointers, @pointers - 1;
 	$composer->cancel;

@@ -23,7 +23,7 @@ use Manage::Utils qw(
 	_tkinit
 	_center_window
 	_text_info
-	$_entries
+	$_entries $_history
 );
 use Manage::Resolver qw(
 	@given
@@ -39,6 +39,7 @@ my $command = _capture_output(
 			title => $title,
 			label => $label,
 			file => $_entries,
+			history_db => $_history,
 			extendMenu => sub {
 				my ($self, $menu) = @_;
 				my ($submenu, $value);

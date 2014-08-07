@@ -75,6 +75,7 @@ use Exporter::Easy (
 		_make_sure_file
 		_contents_to_file
 		_contents_of_file
+		_is_sqlite_file
 		_extract_from
 		_diagnostic
 		_temp_filename
@@ -110,7 +111,7 @@ use Exporter::Easy (
 		_refresh_menu_button_items
 		_install_menu_button
 		_win32
-		$_entries
+		$_entries $_history
 	)],
 );
 sub _max ($$) { $_[$_[0] < $_[1]] }
@@ -267,8 +268,8 @@ sub _duplicates {
 	@array
 }
 sub _string_contains {
-	my ($haystack,$needle,$pos) = @_;
-	given ($pos) {
+	my ($haystack,$needle,$align) = @_;
+	given ($align) {
 		when (0) {
 			return $haystack =~ /^\Q$needle\E/ ? 1 : 0;
 		}
@@ -448,12 +449,23 @@ sub _contents_of_file {
 		$encode = $file->[1];
 		$file = $file->[0];
 	}
+	my $chars = shift;
 	open my $fh, '<' . ($encode ? ":$encode" : ''), $file || die "Can't open file : $!\n";
-	no warnings;
-	local $/ = undef;    # slurp mode
-	my $contents = <$fh>;
+	my $contents;
+	if (_value_or_else(0, $chars) > 0) {
+		read $fh, $contents, $chars
+	} else {
+		no warnings;
+		local $/ = undef;    # slurp mode
+		$contents = <$fh>;
+	}
 	close $fh;
 	$contents
+}
+sub _is_sqlite_file {
+	my $file = shift;
+	my $header = _contents_of_file $file, 16;
+	_string_contains $header, 'SQLite format 3', 0
 }
 sub _contents_to_file {
 	my $file = shift;
@@ -932,5 +944,6 @@ sub _install_menu_button {
 	$btn
 }
 our $_entries = catfile dirname(dirname  __FILE__), ".entries";
+our $_history = catfile dirname(dirname  __FILE__), ".history";
 1;
 
