@@ -64,6 +64,7 @@ use Exporter::Easy (
 		_get_clipboard
 		_persist
 		_implicit
+		_visit_sorted_tree
 		_iterate_sorted_values
 		_fileparse
 		_files_in_dir
@@ -379,6 +380,20 @@ sub _implicit {
 	$implicits{$_} = $items{$_} foreach (keys %items);
 	_persist $file, \%implicits;
 }
+sub _visit_sorted_tree {
+	my %hash = %{$_[0]};
+	my $func = $_[1];
+	my $prefix = _value_or_else '', $_[2];
+	foreach my $key (sort keys %hash) {
+		my $path = $prefix ? join($_separator[2],$prefix,$key) : $key;
+		my $value = $hash{$key};
+		if (_is_hash_ref($value)) {
+			_visit_sorted_tree($value, $func, $path) 
+		} else {
+			$func->($path, $value)
+		}
+	}
+}
 sub _iterate_sorted_values {
 	my %hash = %{$_[0]};
 	my $func = $_[1];
@@ -576,6 +591,8 @@ sub _clipboard {
 		    print;
 		} 
 	}
+	use Time::HiRes;
+	Time::HiRes::sleep(0.5);	
 	waitpid($pid, 1);
 }
 sub _get_clipboard {
@@ -700,14 +717,32 @@ sub _message {
 	$top->destroy;
 	$result
 }
+sub _text_menu_extension {
+	my $widget = shift;
+	my %menu_items = @_;
+	my $text_widget = $widget->Subwidget('scrolled');
+	if (%menu_items) {
+		my $menu = $text_widget->menu;
+		$menu->separator;
+		foreach (keys %menu_items) {
+			$menu->command(
+				-label => $_, 
+				-command => [$menu_items{$_},$_,$widget->parent,$widget]
+			)
+		}
+	}
+	$text_widget
+}
 sub _text_info {
 	my $top = _value_or_else sub{_tkinit(1)}, shift;
 	$top->title(_value_or_else('', shift));
 	my $text = shift;
+	my %menu_items = @_;
 	require Tk::ROText;
-	my $txt = $top->Scrolled("ROText", -scrollbars => 'oe');
-	$txt->pack(-side => 'left', -fill => 'both', -expand => 1);
-	$txt->insert('end', $text);
+	my $widget = $top->Scrolled("ROText", -scrollbars => 'oe');
+	$widget->pack(-side => 'left', -fill => 'both', -expand => 1);
+	$widget->insert('end', $text);
+	_text_menu_extension($widget, %menu_items);
 	_center_window $top;
 }
 sub _text_dialog {
@@ -739,18 +774,7 @@ sub _text_dialog {
 		my $widget = $parent->Scrolled("Text", @params);
 		$widget->pack(-fill => 'both', -expand => 1);
 		$widget->insert('end', $text);
-		my $text_widget = $widget->Subwidget('scrolled');
-		if (%menu_items) {
-			my $menu = $text_widget->menu;
-			$menu->separator;
-			foreach (keys %menu_items) {
-				$menu->command(
-					-label => $_, 
-					-command => [$menu_items{$_},$_,$parent,$widget]
-				)
-			}
-		}
-		$text_widget
+		_text_menu_extension($widget, %menu_items)
 	};
 	my $book;
 	my @widgets;

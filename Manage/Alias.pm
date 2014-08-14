@@ -25,6 +25,7 @@ use Manage::Utils qw(
 	_center_window
 	$_entries
 	@_separator
+	_visit_sorted_tree
 );
 use Manage::PersistHash;
 use Manage::Resolver qw(
@@ -134,7 +135,7 @@ sub ask_alias {
 	$be = $dlg->BrowseEntry(
 		-listcmd => sub {
 			$be->delete(0,'end');
-			iterate_paths sub {
+			_visit_sorted_tree $data{'alias'}, sub {
 				$be->insert('end', $_[0]);
 			};
 		},

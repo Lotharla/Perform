@@ -13,6 +13,7 @@ use Manage::Utils qw(
 	dump pp
 	_gt _lt _eq _ne
 	_combine
+	_is_code_ref
 	_value_or_else 
 	_getenv
 	_setenv
@@ -37,6 +38,7 @@ use Manage::Resolver qw(
 	set_given
 );
 use Manage::Composer;
+use Manage::Composite;
 given (_value_or_else(0, _getenv('testing'))) {
 	when (_ne 0) {
 		my $composer = new Composer( 
@@ -48,13 +50,33 @@ given (_value_or_else(0, _getenv('testing'))) {
 		exit
 	}
 }
+my ($entr,$hist) = ('/tmp/.entries', '/tmp/.history');
+unlink $entr,$hist;
 #goto here;
+my @ddd = ("D'oh","I didn't do it");
+{
+	my $composite = new Composite(
+		file => $entr, 
+	);
+	ok $composite->use_file;
+	is $composite->mode, 2;
+	ok _is_code_ref $composite->{data};
+	is $composite->{data}->('ddd'), undef;
+	$composite->{data} = $composite->data(sub {
+		$_[0]->{'ddd'} = _value_or_else([], 'ddd', $_[0]);
+	});
+	isnt $composite->{data}->('ddd'), undef;
+	my %data = $composite->{data}->();
+	push @{$data{'ddd'}}, @ddd;
+	$composite->save;
+	%data = $composite->data()->();
+	is_deeply $data{'ddd'}, \@ddd;
+	$composite->{window}->destroy;
+}
 my $glob = '*.xxx';
 my $alias = _rndstr 8, 'a'..'z', 0..9;
 my $ntd = _combine('nothing to do', "\$1");
 my $dtn = reverse $alias;
-my ($entr,$hist) = ('/tmp/.entries', '/tmp/.history');
-unlink $entr,$hist;
 {
 	my $composer = new Composer(
 		file => $entr, 
@@ -62,7 +84,7 @@ unlink $entr,$hist;
 	);
 	my %data = $composer->{data}->();
 	my @keys = sort keys %data;
-	is_deeply \@keys, ["__file__","alias","assoc","environ","options"];
+	is_deeply \@keys, ["__file__","alias","assoc","ddd","environ","options"];
 	'Settings'->modify_setting($data{'assoc'}, $glob, $alias);
 	update_alias $alias, $ntd;
 	$composer->give($dtn);
@@ -119,5 +141,5 @@ here:
 	$canvas->pack;
 	MainLoop();
 }
-=pod1.xxx
+=pod
 =cut

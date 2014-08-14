@@ -59,6 +59,7 @@ use Manage::Utils qw(
 	_clipboard
 	_get_clipboard
 	_gt _lt
+	_visit_sorted_tree
 );
 use Manage::Resolver qw(
 	is_dollar has_dollar dollar_amount dollar_attr
@@ -214,14 +215,20 @@ my %alias = (
 			   "chmod a+x" => "chmod a+x \"\$1\"",
 			   "chmod a-x" => "chmod a-x \"\$1\"",
 			 },
+	devel => { "\${*:devels}" => "~/work/bin/devel.sh \$1" },
 );
 Manage::Alias::inject( alias => \%alias );
 update_alias("chmod|chmod a+x", $didnt);
 is resolve_alias("chmod|chmod a+x"), $didnt;
-is keys %alias, 3;
+is keys %alias, 4;
 update_alias("find|find-in-files", $pattern);
 is resolve_alias("find|find-in-files"), $pattern;
-is keys %alias, 4;
+is keys %alias, 5;
+@parts = ();
+_visit_sorted_tree \%alias, sub {
+	push @parts, $_[0] unless has_dollar $_[0];
+};
+is @parts, 5;
 %alias = ();
 update_alias("xxx|xxx-in-files", $didnt);
 is resolve_alias("xxx|xxx-in-files"), $didnt;

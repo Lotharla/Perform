@@ -6,6 +6,7 @@ use feature qw(say switch);
 use Tk;
 use Tk::NoteBook;
 use Tk::MListbox;
+use Tk::BrowseEntry;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(dirname abs_path __FILE__);
@@ -36,11 +37,13 @@ use Manage::Utils qw(
 	$_entries
 	_flip_hash
 	_text_info
+	_visit_sorted_tree
 );
 use Manage::Resolver qw(
 	clipdir
 	next_clip
 	get_clip
+	has_dollar
 );
 use Manage::Composite;
 our @ISA = qw(Composite);
@@ -51,6 +54,7 @@ sub new {
 sub data {
 	my $self = shift;
 	return $self->SUPER::data(sub {
+		$_[0]->{'alias'} = _value_or_else({}, 'alias', $_[0]);
 		$_[0]->{'assoc'} = _value_or_else({}, 'assoc', $_[0]);
 		$_[0]->{'environ'} = _value_or_else({}, 'environ', $_[0]);
 	});
@@ -62,10 +66,19 @@ sub initialize {
 	$self->{book} = $self->{window}->NoteBook();
     $self->{book}->grid(-row => 0, -column => 0, -columnspan => 2);
 	$self->populate($self->mode);
-	my $en = $self->{window}->Entry( -width => 25,
+	my ($en,$be);
+	$en = $self->{window}->Entry( -width => 25,
 		-textvariable => \$self->{key})->grid(-row => 1, -column => 0);
-	$self->{window}->Entry( -width => 25,
-		-textvariable => \$self->{value})->grid(-row => 1, -column => 1);
+	$be = $self->{window}->BrowseEntry(
+		-listcmd => sub {
+			$be->delete(0,'end');
+			my %data = $self->{data}->();
+			_visit_sorted_tree $data{'alias'}, sub {
+				$be->insert('end', $_[0]) unless has_dollar $_[0];
+			};
+		},
+		-variable => \$self->{value}
+	)->grid(-row => 1, -column => 1);
 	$self->bottom;
 	_set_selection($en);
 	_center_window($self->{window});

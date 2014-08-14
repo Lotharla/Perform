@@ -15,19 +15,22 @@ use Manage::Utils qw(
 	_escapeDoubleQuotes
 	_getenv 
 	_value_or_else 
-	_capture_output
 	_perform
 	_perform_2
+	_capture_output
 	_capture_output_2
+	_contents_to_file
 	_diagnostic
 	_tkinit
 	_center_window
 	_text_info
+	_ask_file
 	$_entries $_history
 );
 use Manage::Resolver qw(
 	@given
 	given_title
+	next_clip
 );
 use Manage::Composer;
 my $modifier;
@@ -74,7 +77,14 @@ given ($modifier) {
 	}
 	when ('Control') {
 		my $text = _capture_output_2 $command;
-		_text_info undef, $command, $text;
+		_text_info undef, $command, $text, 'Save text' => sub {
+			my ($label,$parent,$widget) = @_;
+			my $file = next_clip;
+			$file = _ask_file($parent, $label, $file, [], 1);
+			if ($file) {
+				_contents_to_file $file, $text;
+			}
+		};
 		MainLoop;
 	}
 	default {

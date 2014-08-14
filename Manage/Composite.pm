@@ -38,7 +38,7 @@ sub data {
 	tie my %data, "PersistHash", $self->file;
 	_call [shift, \%data];
 	return sub {
-		%data = @_ if defined $_[0];
+		return $data{$_[0]} if defined $_[0];
 		%data
 	};
 }

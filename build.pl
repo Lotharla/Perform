@@ -134,6 +134,7 @@ sub build_command {
 		$output = _combine $output, "@_";
 	} else {
 		my @targets = build_targets($file);
+		unshift @targets, '-d';
 		_setenv 'title', $output;
 		_setenv 'item', 'default';
 		_setenv "list-multiple", 1;
@@ -161,7 +162,9 @@ given (_getenv_once('testing', 0)) {
 			"/home/lotharla/work/c+plus/Makefile",
 			"/home/lotharla/work/sqlite/extension/sqlite3-pcre/Makefile",
 		);
-		_perform build_command choice @files;
+		my $command = build_command choice @files;
+		say $command;
+		_perform $command;
 	}
 	when (_gt 0) {
 		my $output = build_command "/home/lotharla/work/c+plus/Makefile", "realpath", "pcre_example";
