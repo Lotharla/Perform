@@ -119,7 +119,7 @@ sub iterate_paths {
 	}
 }
 sub ask_alias {
-	my ($path, $value)= @_;
+	my ($path, $value, $launch)= @_;
 	my @buttons = $path ? 
 		('OK','Add/Update','Remove','Cancel') :
 		('Add/Update','Remove','Close');
@@ -154,6 +154,13 @@ sub ask_alias {
 		-width => $dim[0],
 		-textvariable => \$value
 	)->grid(-row => 1, -column => 1);
+=pod
+	$dlg->Checkbutton(
+		-text => 'launch immediately',
+		-onvalue => 1, -offvalue => 0, 
+		-variable => \$launch
+	)->grid(-row => 2, -column => 1)->configure(-state => 'disabled');
+=cut
 	_set_selection($en);
 ask:
 	given($dlg->Show) {
@@ -184,16 +191,16 @@ sub cascades {
 		my $value = $hash{$key};
 		if (is_dollar $key) {
 			my $a = dollar_amount($key);
-			my $v = make_value($a,'');
-			if ($v) {
+			my $val = make_value($a,'');
+			if ($val) {
 				given ($a->[0]) {
 					when ('*') {
-						for (split(/$path_rex/, $v)) {
+						for (split(/$path_rex/, $val)) {
 							my $p = join($_separator[2],$name,$_);
-							my $val = place_given($value, $_);
+							my $v = place_given($value, $_);
 							$menu->command(
 								-label   => $_,
-								-command => [ $func, $p, $val ]
+								-command => [ $func, $p, $v ]
 							)
 						}
 					}

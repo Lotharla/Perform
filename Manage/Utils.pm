@@ -86,7 +86,7 @@ use Exporter::Easy (
 		_check_output
 		_perform
 		_perform_2
-		_capture_output_2
+		_result_perform
 		_binsearch_alpha
 		_binsearch_numeric
 		_object_from_XML
@@ -566,7 +566,7 @@ sub _perform_2 {
 	    print;
 	} 
 }
-sub _capture_output_2 {
+sub _result_perform {
 	my $command = shift;
 	my $dir = "/tmp/out";
 	my $file = _temp_filename 'outXXXX', $dir;

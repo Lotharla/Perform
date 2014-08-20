@@ -32,7 +32,7 @@ use Manage::Utils qw(
 	_flip_hash 
 	_binsearch_numeric
 	_capture_output 
-	_capture_output_2
+	_result_perform
 	_check_output 
 	_file_exists
 	_dir_exists

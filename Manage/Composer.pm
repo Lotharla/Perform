@@ -50,6 +50,7 @@ sub initialize {
     my( $self ) = @_;
     $self->SUPER::initialize();
 	my %data = $self->{data}->();
+	$self->{immediate} = $data{options}->{"immediate"} ? 1 : 0;
     Settings->apply('Associations', %data);
     Settings->apply('Environment', %data);
     my $menu = _menu($self->{window});
@@ -57,6 +58,7 @@ sub initialize {
 	$submenu = install_alias_button($menu, 'Alias', sub { 
 		my ($path, $value) = @_; 
 		$self->item($value) if $value;
+		$self->commit if $self->{immediate};
 		_set_selection($self->{entry});
 	});
 	$submenu->configure('-underline', 0);

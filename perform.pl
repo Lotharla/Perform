@@ -18,7 +18,7 @@ use Manage::Utils qw(
 	_perform
 	_perform_2
 	_capture_output
-	_capture_output_2
+	_result_perform
 	_contents_to_file
 	_diagnostic
 	_tkinit
@@ -57,6 +57,12 @@ my $command = _capture_output(
 					-variable => \$value, -command => sub{ $self->{modifier} = 'Control' });
 				$submenu->radiobutton(-label=>"normal", -value => ' ', 
 					-variable => \$value, -command => sub{ $self->{modifier} = ' ' });
+				$submenu->separator;
+				$submenu->checkbutton(-label=>"immediately", -onvalue => 1, -offvalue => 0, 
+					-variable => \$self->{immediate}, -command => sub{
+						my %data = $self->{data}->();
+						$data{options}->{"immediate"} = $self->{immediate};
+					});
 			}
 		);
 		$obj->relaunch;
@@ -65,10 +71,10 @@ my $command = _capture_output(
 );
 exit if ! $command;
 sub terminalize {
-	my $terminal = _chomp(`gconftool-2 -g /desktop/gnome/applications/terminal/exec`);
 	my $output = _flatten $_[0];
 	$output = _escapeDoubleQuotes $output;
 	$output = "bash -c '" . $output . " | less'";
+	my $terminal = _chomp(`gconftool-2 -g /desktop/gnome/applications/terminal/exec`);
 	return _combine( "$terminal", "-t", sprintf("\"%s\"", $output), "-e", "\"$output\"" );
 }
 given ($modifier) {
@@ -76,7 +82,7 @@ given ($modifier) {
 		_perform terminalize $command
 	}
 	when ('Control') {
-		my $text = _capture_output_2 $command;
+		my $text = _result_perform $command;
 		_text_info undef, $command, $text, 'Save text' => sub {
 			my ($label,$parent,$widget) = @_;
 			my $file = next_clip;

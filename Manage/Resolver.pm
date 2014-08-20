@@ -47,7 +47,7 @@ use Manage::Utils qw(
 	_message
 	_text_dialog
 	_question
-	_capture_output_2
+	_result_perform
 	_split_on_whitespace
 	@_separator
 );
@@ -142,7 +142,7 @@ sub make_dollar {
 }
 sub devels {
 	my $sh = catfile dirname(dirname  __FILE__), "../bin/devel.sh";
-	my $output = _capture_output_2($sh . " -s");
+	my $output = _result_perform($sh . " -s");
 	_split_on_whitespace $output, 0;
 }
 sub make_value {
