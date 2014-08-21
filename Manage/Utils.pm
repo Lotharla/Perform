@@ -37,7 +37,7 @@ use Exporter::Easy (
 		_surround
 		_has_whitespace
 		_split_on_whitespace
-		_blessed
+		_is_blessed
 		_is_type_of
 		_is_code_ref
 		_is_array_ref
@@ -67,11 +67,13 @@ use Exporter::Easy (
 		_visit_sorted_tree
 		_iterate_sorted_values
 		_fileparse
+		_filename_extension
 		_files_in_dir
 		_is_glob
 		_glob_match
 		_dir_exists
 		_file_exists
+		_realpath
 		_make_sure_dir
 		_make_sure_file
 		_contents_to_file
@@ -170,8 +172,8 @@ sub _is_array_ref { ref($_[0]) eq 'ARRAY' }
 sub _is_hash_ref { ref($_[0]) eq 'HASH' }
 sub _array { _is_array_ref($_[0]) ? @{$_[0]} : () }
 sub _hash { _is_hash_ref($_[0]) ? %{$_[0]} : () }
-sub _blessed { ref($_[0]) && UNIVERSAL::can($_[0],'can') }
-sub _is_type_of { _blessed($_[1]) && $_[1]->isa($_[0]) }
+sub _is_blessed { ref($_[0]) && UNIVERSAL::can($_[0],'can') }
+sub _is_type_of { _is_blessed($_[1]) && $_[1]->isa($_[0]) }
 sub _is_value { $_[0] || length($_[0]) }
 sub _value_or_else {
 	my $default = shift;
@@ -190,7 +192,7 @@ sub _value_or_else {
 					my @value = @{$value};
 					return defined $value[$key] ? $value[$key] : _value_or_else($default);
 				}
-				when ($_ eq 'HASH' || _blessed($value)) {
+				when ($_ eq 'HASH' || _is_blessed($value)) {
 					my %value = %{$value};
 					return exists $value{$key} ? $value{$key} : _value_or_else($default);
 				}
@@ -241,7 +243,7 @@ sub _now {
 }
 sub _rndstr { 
 	my $len = _value_or_else 8, shift;
-	@_ = ('a'..'z', 0..9) if ! @_;
+	@_ = ('a'..'z', 0..9) unless @_;
 	join '', @_[ map { rand @_ } 1 .. $len ]
 }
 sub _index_of {
@@ -259,7 +261,7 @@ sub _array_contains {
 }
 sub _duplicates {
 	my @array = @_;
-	return () if ! @array;
+	return () unless @array;
 	my %hash = map { $_ => 1 } @array;
 	my @keys = keys %hash;
 	foreach (@keys) {
@@ -294,7 +296,7 @@ sub _detect {
 }
 sub _interpolate {
 	my ($haystack,$needle,$replacement) = @_;
-	while(-1 != (my $i = rindex $haystack,$needle)) {
+	while(-1 != ( my $i = rindex $haystack,$needle )) {
 		substr $haystack,$i,length($needle),$replacement
 	};
 	$haystack
@@ -306,7 +308,7 @@ sub _subst_rex {
 		for my $i (1..9) {
 			my $n = "\$" . $i;
 			my $r = eval $n;
-			last if ! $r;
+			last unless $r;
 			$replacement = _interpolate $replacement,$n,$r
 		}
 	} 
@@ -331,7 +333,7 @@ sub _interpolate_rex {
 			$output .= substr $haystack, 0, $p - $l;
 			my $x = substr($haystack, $p - $l, $l);
 			my $y = $_[++$n] ? $_[$n] : $picker->($x);
-			return $input if !defined($y);
+			return $input unless defined($y);
 			$output .= $y;
 			$haystack = substr $haystack, $p;
 		}
@@ -373,12 +375,22 @@ sub _persist {
 }
 sub _implicit {
 	my $file = _make_sure_file(catfile(dirname(__FILE__), ".implicit"));
-	my %implicits = _hash(_persist $file);
-	return %implicits if ! @_;
-	return $implicits{$_[-1]} if @_ % 2;
+	my %hash = _hash(_persist $file);
+	return %hash unless @_;
+	if (@_ < 2) {
+		my $key = shift;
+		if (_is_array_ref $key) {
+			my @keys = _array $key;
+			for (@keys) {
+				return $hash{$_} if exists $hash{$_}
+			}
+			return undef
+		}
+		return $hash{$key}
+	}
 	my %items = @_;
-	$implicits{$_} = $items{$_} foreach (keys %items);
-	_persist $file, \%implicits;
+	$hash{$_} = $items{$_} foreach (keys %items);
+	_persist $file, \%hash;
 }
 sub _visit_sorted_tree {
 	my %hash = %{$_[0]};
@@ -409,10 +421,18 @@ sub _fileparse {
 	fileparse(shift, qr/\.[^.]*/);
 #	returns	($name,$path,$suffix)
 }
+sub _filename_extension {
+	my $file = shift;
+	return '' unless $file;
+	my @parts = _fileparse $file;
+	$parts[2] =~ /^\./ 
+		? substr($parts[2], 1) 
+		: $parts[2]
+}
 sub _files_in_dir {
 	my $dir = shift;
 	my $fullpath = shift;
-	return () if ! _dir_exists($dir);
+	return () unless _dir_exists($dir);
 	opendir(DIR, $dir) || die "Can't open directory : $!\n";
 	my @list = grep ! /^\.\.?$/, readdir(DIR);
 	closedir(DIR);
@@ -438,6 +458,21 @@ sub _dir_exists {
 sub _file_exists {
 	my $file = shift;
 	$file && -f $file
+}
+sub _realpath {
+	my $path = _value_or_else '', shift;
+	$path =~ s{
+	    	^ ~ # find a leading tilde
+	    	( # save this in $1
+	    		[^/] # a non-slash character
+	    			* # repeated 0 or more times (0 means me)
+    	)
+    	}{
+			$1
+    			? (getpwnam($1))[7]
+    			: ( $ENV{HOME} || $ENV{LOGDIR} )
+    	}ex;
+	$path
 }
 sub _make_sure_dir {
 	my $dir = shift;
@@ -500,7 +535,7 @@ sub _extract_from {
 	my $rex = _value_or_else '', shift;
 	my @extract = $contents =~ /$rex/g;
 	my $sep = looks_like_number($_[0]) ? $_separator[$_[0]] : $_[0];
-	return @extract if ! $sep;
+	return @extract unless $sep;
 	$sep = _value_or_else $_separator[0], $sep;
 	join $sep, @extract
 }
@@ -826,9 +861,18 @@ sub _file_types {
 				push(@types, $_) foreach @{$_[0]};
 			}
 			when ('HASH') {
-				my %hash = %{$_[0]};
+				my %hash = _hash $_[0];
+				my @array = _array $_[1];
 				my %flip = _flip_hash(\%hash);
-				push(@types, [$_, $flip{$_}]) foreach (keys %flip)
+				foreach (keys %flip) {
+					next if @array && _index_of($_, @array) < 0;
+					my $type = [$_, $flip{$_}];
+					if (@array) {
+						unshift(@types, $type);
+					} else {
+						push(@types, $type);
+					}
+				}
 			}
 			when (@_ != 1) {
 				for (my $i = 0; $i < (@_ - 1); $i += 2) {
@@ -840,17 +884,19 @@ sub _file_types {
 	return @types;
 }
 sub _ask_file {
+	my $save = looks_like_number $_[-1] ? $_[-1] : 0;
 	my $top = _value_or_else sub{_tkinit(1)}, shift;
-	my $title = _value_or_else '', shift;
-	my $file = _value_or_else sub{_implicit("file")}, shift;
+	my $default = ($save ? "Save" : "Open") . ' file';
+	my $title = _value_or_else $default, shift;
+	my $file = _value_or_else sub{_implicit [$title,$default]}, shift;
 	my @types = _array(shift);
-	@types = _file_types if ! @types;
+	@types = _file_types unless @types;
 	if (@types == 1 && _win32()) {
 		push @types, @types;
 	}
 	my $dir = dirname(_value_or_else abs_path($0), $file);
 	$file = length($file) ? basename($file) : '';
-	if (shift) {
+	if ($save) {
 		$file = $top->getSaveFile(
 			-title => $title,
 			-initialdir => $dir,
@@ -863,18 +909,18 @@ sub _ask_file {
 			-initialfile => $file,
 			-filetypes => \@types);
 	}
-	_implicit "file", $file if $file;
+	_implicit $title, $file, $default, $file if $file;
 	$file
 }
 sub _ask_directory {
 	my $top = _value_or_else sub{_tkinit(1)}, shift;
-	my $title = _value_or_else '', shift;
-	my $dir = _value_or_else sub{_implicit("directory")}, shift;
+	my $title = _value_or_else 'Directory', shift;
+	my $dir = _value_or_else sub{_implicit [$title, 'Directory']}, shift;
 	$dir = _value_or_else dirname(abs_path $0), $dir;
 	$dir = $top->chooseDirectory(
 		-title => $title,
 		-initialdir => $dir);
-	_implicit "directory", $dir if $dir;
+	_implicit $title, $dir, 'Directory', $dir if $dir;
 	$dir
 }
 sub _menu {

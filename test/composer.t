@@ -24,6 +24,7 @@ use Manage::Utils qw(
 	_check_output
 	_get_clipboard
 	$_entries $_history
+	_clipboard
 	_tkinit
 	_text_dialog
 );
@@ -84,7 +85,7 @@ my $dtn = reverse $alias;
 	);
 	my %data = $composer->{data}->();
 	my @keys = sort keys %data;
-	is_deeply \@keys, ["__file__","alias","assoc","ddd","environ","options"];
+	is_deeply \@keys, ["__file__","alias","assoc","ddd","environ","favor","options"];
 	'Settings'->modify_setting($data{'assoc'}, $glob, $alias);
 	update_alias $alias, $ntd;
 	$composer->give($dtn);
@@ -133,6 +134,7 @@ here:
 	$composer->cancel;
 }
 {
+	_clipboard $ddd[0];
 	my $win = _tkinit(0);
 	_text_dialog $win, [20,3], "Given", \@given, 1;
 	my $canvas = $win->Scrolled('Canvas', -width => 300, -height => 400);

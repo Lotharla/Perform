@@ -24,7 +24,7 @@ use Manage::Utils qw(
 	_setenv
 	_is_array_ref
 	_is_value
-	_blessed
+	_is_blessed
 	_value_or_else 
 	_interpolate_rex
 	_rndstr
@@ -50,6 +50,7 @@ use Manage::Utils qw(
 	_result_perform
 	_split_on_whitespace
 	@_separator
+	_realpath
 );
 use Exporter::Easy (
 	OK => [ qw(
@@ -67,6 +68,7 @@ use Exporter::Easy (
 		get_dollars
 		set_dollars
 		place_given
+		given_fill_dollars
 		resolve_dollar
 		clipdir
 		next_clip
@@ -150,7 +152,11 @@ sub make_value {
 	if (_is_array_ref($amount)) {
 		given ($amount->[1]) {
 			when ('dir') {
+				$value = _realpath $value;
 				$value = dirname $value if -f $value;
+			}
+			when ('file') {
+				$value = _realpath $value;
 			}
 			when ('devels') {
 				$value = join($_separator[2], devels);
@@ -196,7 +202,8 @@ sub get_dollars {
 sub set_dollars {
 	my $input = shift;
 	return detect_dollar ($input, sub {
-		make_value $dollars{$_[0]}->{amount}, $dollars{$_[0]}->{value}
+		my $key = shift;
+		make_value $dollars{$key}->{amount}, $dollars{$key}->{value}
 	});
 }
 sub place_given {
@@ -204,6 +211,9 @@ sub place_given {
 	my @gin = @_ < 1 ? @given : @_;
 	get_dollars $input, @gin;
 	set_dollars $input
+}
+sub given_fill_dollars {
+	@given == keys %dollars
 }
 my ($obj, $window, $width);
 sub inject {
@@ -215,7 +225,7 @@ sub add_clip {
 	my $win = shift;
 	my $file = next_clip;
 	my $text = get_clip $window, $file;
-	my @dim = _blessed($obj) ? $obj->dimension("text") : ();
+	my @dim = _is_blessed($obj) ? $obj->dimension("text") : ();
 	my $result = _text_dialog $win, \@dim, $file, $text;
 	if ($result) {
 		my @result = _array($result);
@@ -240,7 +250,7 @@ sub clip_menu {
 	$command = sub {
 		my $repl = catfile $dir, $_[0];
 		_replace_text($entry, $repl, 1)
-	} if ! $command;
+	} unless $command;
 	my @files = _files_in_dir($dir);
 	@files = sort @files;
 	if ($btn) {
@@ -265,7 +275,7 @@ sub resolve_dollar {
 		});
 		return $output;
 	}
-	%dollars = get_dollars($input);
+	%dollars = get_dollars $input;
 	my $dlg = $window->DialogBox(
 		-title => $input,
 		-buttons => ['OK', 'Cancel'],
@@ -292,7 +302,7 @@ sub resolve_dollar {
 						-f $dollars{$key}->{value} ? $dollars{$key}->{value} : '', \@types) :
 					_ask_directory($window, 'Choose directory', 
 						-d $dollars{$key}->{value} ? $dollars{$key}->{value} : ''); 
-				_replace_text($en, $answer) if $answer;
+				_replace_text $en, $answer if $answer;
 			} 
 		)->grid(-row => $row, -column => $col++);
 		$frm->Radiobutton(
@@ -342,10 +352,9 @@ sub resolve_dollar {
 		)->grid(-row => $row, -column => $col++);
 =cut
 	}
-show:
 	my $answer = $dlg->Show();
 	if ($answer and $answer eq "OK") {
-		$output = set_dollars($input);
+		$output = set_dollars $input ;
 	}
 	return $output;
 }

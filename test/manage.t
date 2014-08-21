@@ -60,6 +60,7 @@ use Manage::Utils qw(
 	_get_clipboard
 	_gt _lt
 	_visit_sorted_tree
+	_realpath
 );
 use Manage::Resolver qw(
 	is_dollar has_dollar dollar_amount dollar_attr
@@ -74,6 +75,7 @@ use Manage::Resolver qw(
 use Manage::Alias qw(
 	resolve_alias 
 	update_alias
+	visit_alias_tree
 );
 use Manage::Settings;
 my $file = catfile tmpdir, "test";
@@ -131,18 +133,19 @@ my %assoc = (
 	"Makefile" => "make",
 	"GNUmakefile" => "make",
 );
-@_ = _file_types();
-is_deeply \@_, [["All files", '*']];
-@_ = _file_types("No files", '');
-is_deeply \@_, [["All files", '*'], ["No files", '']];
-@_ = _file_types(\%assoc);
-is @_, 7;
-#dump @_;
-#_ask_file _tkinit(0), 'Test', "$ENV{HOME}/work/bin/devel.sh", \@_;
-@_ = sort(keys %assoc);
-is _value_or_else('', 4, \@_), '.t';
-is _value_or_else('x', 10, \@_), 'x';
-is _value_or_else(sub{'y'}, 11, \@_), 'y';
+@parts = _file_types();
+is_deeply \@parts, [["All files", '*']];
+@parts = _file_types("No files", '');
+is_deeply \@parts, [["All files", '*'], ["No files", '']];
+@parts = _file_types(\%assoc);
+is @parts, 7;
+@parts = _file_types \%assoc, ["make"];
+is @parts, 2;
+#_ask_file _tkinit(0), 'Test', "$ENV{HOME}/work/bin/devel.sh", \@parts;
+@parts = sort(keys %assoc);
+is _value_or_else('', 4, \@parts), '.t';
+is _value_or_else('x', 10, \@parts), 'x';
+is _value_or_else(sub{'y'}, 11, \@parts), 'y';
 %_ = %assoc;
 is _value_or_else('', '.t', \%_), 'perl';
 is _value_or_else('', 'x', \%_), '';
@@ -154,7 +157,7 @@ PersistHash::store($acca, $file);
 ok -f $file;
 PersistHash::fetch($acca, $file);
 is_deeply $acca->{"assoc"}, \%assoc, "assoc";
-is_deeply $acca->{"cossa"}, \%cossa, "cossa";	#	32
+is_deeply $acca->{"cossa"}, \%cossa, "cossa";
 my $aref = \%assoc;
 is 'Settings'->find_assoc($aref, '.xxx'), '';
 'Settings'->modify_setting($aref, '.xxx', 'XXX');
@@ -180,7 +183,6 @@ is place_given(_combine($pattern, "\$5")),
 my $term = `gconftool-2 -g /desktop/gnome/applications/terminal/exec`;
 isnt $term, "gnome-terminal";
 is _chomp($term), "gnome-terminal";
-#	42
 $pattern = "find \${DIR} -name \"\${FILES}\" -print | xargs grep \"\$123\" 2>/dev/null";
 my $temp = {"\${DIR}"=>"xxx","\${FILES}"=>"yyy","\$123"=>"zzz"};
 is(detect_dollar($pattern, sub { $temp->{shift(@_)} }), 
@@ -198,17 +200,34 @@ ok -f $file;
 {
 	tie my %data, "PersistHash", $file;
 	my @keys = sort keys(%data);
-	is_deeply \@keys, ["__file__","alias","assoc",'environ',"options"];
+	is_deeply \@keys, ["__file__","alias","assoc",'environ','favor',"options"];
 	PersistHash::store(\%data, $file);
 	$temp = PersistHash::fetch({}, $file);
-	is_deeply $temp, \%data;	#	50
+	is_deeply $temp, \%data;
 }
 my @types = @{Settings->apply('Associations', assoc => \%assoc)};
 is @types, 6;
 foreach my $type (@types) {
 	is 'Settings'->find_assoc($aref, $_), @$type[0] foreach @{@$type[1]};
 }
-my %alias = (
+my %alias = ();
+Manage::Alias::inject( alias => \%alias );
+update_alias("xxx|x-in-files", $doh);
+is keys %alias, 1, 'alias';
+is keys %{$alias{"xxx"}}, 1;
+is resolve_alias("xxx|x-in-files"), $doh;
+update_alias("xxx|x-in-files|yz", $didnt);
+is keys %{$alias{"xxx"}}, 1;
+is keys %{$alias{"xxx"}->{"x-in-files"}}, 2;
+@parts = ();
+visit_alias_tree sub {
+	push @parts, $_[0];
+};
+@parts = sort @parts;
+is @parts, 2;
+is resolve_alias($parts[0]), $doh;
+is resolve_alias($parts[1]), $didnt;
+%alias = (
 	ant   => "bash /home/lotharla/work/bin/ant-or-make.sh \"\$1\"",
 	bash  => "bash \"\$1\"",
 	chmod => {
@@ -217,7 +236,6 @@ my %alias = (
 			 },
 	devel => { "\${*:devels}" => "~/work/bin/devel.sh \$1" },
 );
-Manage::Alias::inject( alias => \%alias );
 update_alias("chmod|chmod a+x", $didnt);
 is resolve_alias("chmod|chmod a+x"), $didnt;
 is keys %alias, 4;
@@ -225,14 +243,10 @@ update_alias("find|find-in-files", $pattern);
 is resolve_alias("find|find-in-files"), $pattern;
 is keys %alias, 5;
 @parts = ();
-_visit_sorted_tree \%alias, sub {
+visit_alias_tree sub {
 	push @parts, $_[0] unless has_dollar $_[0];
 };
 is @parts, 5;
-%alias = ();
-update_alias("xxx|xxx-in-files", $didnt);
-is resolve_alias("xxx|xxx-in-files"), $didnt;
-is keys %alias, 1;
 use POSIX qw(tzset);
 my %history;
 foreach ('Europe/London', 'America/New_York', 'America/Los_Angeles') {
@@ -352,10 +366,17 @@ $p = [$p, @files];
 is _call([$p, @files]), 2 * @files;
 $p = [$p, @files];
 is _call([$p, @files]), 3 * @files;
+my $home = glob('~');
 my $doll = "\${1:dir}";
 my $a = dollar_amount($doll);
-is make_value($a,'x'), 'x';
+is_deeply $a, [1,'dir'];
+is make_value($a,'~'), $home;
 is make_value($a,$_entries), dirname($_entries);
+$doll = "\${2:file}";
+$a = dollar_amount($doll);
+is_deeply $a, [2,'file'];
+is make_value($a,'~'), $home;
+is make_value($a,$_entries), $_entries;
 $doll = "\${*:devels}";
 ok has_dollar($doll) && is_dollar($doll);
 $a = dollar_amount($doll);
@@ -365,7 +386,7 @@ ok _string_contains make_value($a,'x'), $_separator[2];
 ok @_ > 1;
 is place_given("\$1", @_), $_[0];
 _clipboard $didnt;
-is _get_clipboard, $didnt;
+is _get_clipboard, $didnt, 'clipboard';
 ok !has_dollar($_) && !is_dollar($_) && !dollar_amount($_) && !dollar_attr($_) for '$ANT_HOME';
 ok has_dollar($_) && is_dollar($_) && dollar_amount($_)==42 && !dollar_attr($_) for '$42';
 ok has_dollar($_) && !is_dollar($_) && dollar_amount($_)==42 && !dollar_attr($_) for '$42:answer';
@@ -391,6 +412,11 @@ unlink $file;
 	$temp = PersistHash::fetch({}, $file);
 	is_deeply $temp->{hash}, $data{hash};
 }
+$p = dirname(__FILE__);
+ok !_string_contains($p, '~');
+$p =~ s/$home/~/;
+ok _string_contains $p, '~', 1;
+is _realpath($p), dirname(__FILE__);
 =pod
 {
 	tie my %data, "PersistHash", $_history, 1;

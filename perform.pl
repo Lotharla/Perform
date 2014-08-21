@@ -69,7 +69,7 @@ my $command = _capture_output(
 		$modifier = $obj->{modifier};
 	}
 );
-exit if ! $command;
+exit unless $command;
 sub terminalize {
 	my $output = _flatten $_[0];
 	$output = _escapeDoubleQuotes $output;

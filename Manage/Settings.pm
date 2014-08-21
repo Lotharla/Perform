@@ -61,7 +61,7 @@ sub data {
 }
 sub initialize {
     my( $self ) = @_;
-    $self->{data} = $self->data() if ! $self->{data};
+    $self->{data} = $self->data() unless $self->{data};
     $self->SUPER::initialize();
 	$self->{book} = $self->{window}->NoteBook();
     $self->{book}->grid(-row => 0, -column => 0, -columnspan => 2);

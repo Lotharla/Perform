@@ -179,7 +179,7 @@ sub options_menu {
 	my $self = shift;
 	my $menu = shift;
 	my $popup = !defined($menu);
-	$menu->add('separator') if ! $popup;
+	$menu->add('separator') unless $popup;
 	$menu = _install_menu(
 		$popup ? $self->{window} : $menu, 
 		sub {
@@ -226,7 +226,7 @@ sub give {
 sub populate {
 	my $self = shift;
     my $mode = shift;
-    return if ! $mode;
+    return unless $mode;
 	tie my @items,'Tk::Listbox', $self->{listbox};
 	$self->{items} = sub {
 		if ($_[0]) {
@@ -272,7 +272,7 @@ sub selection {
 sub selected {
     my $self = shift;
 	my $sel = $self->selection;
-    return undef if ! $sel;
+    return undef unless $sel;
     my @sel = sort {$a<=>$b} @{$sel};
     return undef if @sel < 1;
 	my @items = $self->{items}->();
@@ -297,7 +297,7 @@ sub update_list {
 sub move_entry {
     my $self = shift;
 	my $direct = shift;
-	return if ! $self->{items};
+	return unless $self->{items};
 	my @items = $self->{items}->();
     my $ptr = _index_of(_value_or_else('', $self->item), @items);
 	$ptr += $direct;
@@ -343,7 +343,7 @@ sub set_point_in_time {
 sub is_new_entry {
     my $self = shift;
 	my $item = shift;
-	return undef if ! $item;
+	return undef unless $item;
 	$self->get_point_in_time($item) < 0
 }
 sub move_point_in_time {

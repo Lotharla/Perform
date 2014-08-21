@@ -44,6 +44,7 @@ sub data {
 		$_[0]->{'alias'} = _value_or_else({}, 'alias', $_[0]);
 		$_[0]->{'assoc'} = _value_or_else({}, 'assoc', $_[0]);
 		$_[0]->{'environ'} = _value_or_else({}, 'environ', $_[0]);
+		$_[0]->{'favor'} = _value_or_else({}, 'favor', $_[0]);
 	});
 }
 sub initialize {
@@ -155,7 +156,7 @@ sub pre_commit {
 	my $output = $self->item;
 	if (has_dollar($output)) {
 		$output = resolve_dollar($output, Settings->apply('Associations'), @_);
-		return 0 if ! $output;
+		return 0 unless $output;
 	}
 	$self->item($output);
 	1

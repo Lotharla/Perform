@@ -127,7 +127,7 @@ sub choice {
 }
 sub build_command {
 	my $file = shift;
-	return '' if ! _file_exists $file;
+	return '' unless _file_exists $file;
 	my $output = build_tool($file);
 	$output .= " -f \"$file\"";
 	if (@_) {

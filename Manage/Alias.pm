@@ -13,8 +13,9 @@ use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
 	_gt _lt
-	_blessed
+	_is_blessed
 	_is_hash_ref
+	_is_value
 	_getenv_once 
 	_value_or_else 
 	_make_sure_file
@@ -39,6 +40,7 @@ use Exporter::Easy (
 	OK => [ qw(
 		resolve_alias
 		update_alias
+		visit_alias_tree
 		ask_alias
 		install_alias_button
 		install_alias_popup_button
@@ -47,7 +49,7 @@ use Exporter::Easy (
 my ($obj, $window, %data);
 sub inject {
 	$obj = $_[0];
-	if (_blessed $obj) {
+	if (_is_blessed $obj) {
 		$window = $obj->{window};
 		%data = $obj->{data}->();
 	} else {
@@ -55,7 +57,7 @@ sub inject {
 		undef $window;
 		%data = @_;
 	}
-	$data{'alias'} = {} if !exists($data{'alias'});
+	$data{'alias'} = {} unless exists($data{'alias'});
 }
 my $path_rex = "\\$_separator[2]";
 sub resolve_alias {
@@ -64,7 +66,7 @@ sub resolve_alias {
 		my $href = $data{'alias'};
 		for (;;) {
 			my @parts = split(/$path_rex/, $path, 2);
-			my $name = $parts[0];
+			my $name = @parts > 0 ? $parts[0] : '';
 			if (@parts < 2) {
 				return $href->{$name};
 			} elsif (not exists $href->{$name}) {
@@ -80,7 +82,7 @@ sub update_alias {
 	my ($path, $value) = @_;
 	my $href = $data{'alias'};
 	my $p = $path;
-	return if ! $p;
+	return unless $p;
 	for (;;) {
 		my @parts = split(/$path_rex/, $p, 2);
 		my $name = $parts[0];
@@ -97,26 +99,17 @@ sub update_alias {
 			last;
 		}
 		unless (_is_hash_ref($href->{$name})) {
-			last if ! $value;
+			last unless $value;
+			my $v = $href->{$name};
 			$href->{$name} = {};
+			$href->{$name}->{''} = $v if _is_value $v;
 		}
 		$href = $href->{$name};
 		$p = $parts[1]
 	}
 }
-sub iterate_paths {
-	my $func = shift;
-	my $prefix = _value_or_else '', shift;
-	my %hash = _value_or_else sub{%{$data{'alias'}}}, shift;
-	foreach my $key (sort keys %hash) {
-		my $path = $prefix ? join($_separator[2],$prefix,$key) : $key;
-		my $value = $hash{$key};
-		if (_is_hash_ref($value)) {
-			iterate_paths($func, $path, $value) 
-		} else {
-			$func->($path)
-		}
-	}
+sub visit_alias_tree {
+	_visit_sorted_tree $data{'alias'}, shift
 }
 sub ask_alias {
 	my ($path, $value, $launch)= @_;
@@ -135,7 +128,7 @@ sub ask_alias {
 	$be = $dlg->BrowseEntry(
 		-listcmd => sub {
 			$be->delete(0,'end');
-			_visit_sorted_tree $data{'alias'}, sub {
+			visit_alias_tree sub {
 				$be->insert('end', $_[0]);
 			};
 		},
@@ -162,18 +155,17 @@ sub ask_alias {
 	)->grid(-row => 2, -column => 1)->configure(-state => 'disabled');
 =cut
 	_set_selection($en);
-ask:
 	given($dlg->Show) {
 		when ($buttons[@buttons > 3 ? 0 : -1]) {
 			return ($path, $value)
 		}
 		when ($buttons[@buttons > 3 ? 1 : 0]) {
 			update_alias $path, $value;
-			goto ask;
+			ask_alias($path, $value)
 		}
 		when ($buttons[@buttons > 3 ? 2 : 1]) {
 			update_alias $path;
-			goto ask;
+			ask_alias($path, $value)
 		}
 	}
 	()

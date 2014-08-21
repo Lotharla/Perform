@@ -8,7 +8,7 @@ use File::Basename qw(dirname);
 use Cwd qw(abs_path cwd);
 use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
-	_blessed
+	_is_blessed
 	_index_of
 	_persist
 	_is_sqlite_file
@@ -103,7 +103,7 @@ sub store {
 			}
 			$dbh->disconnect;
 		} else {
-			my $blessed = _blessed($self);
+			my $blessed = _is_blessed($self);
 			_persist $file, $blessed ? { %$self } : $self;
 		}
 	}

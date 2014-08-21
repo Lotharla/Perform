@@ -62,10 +62,10 @@ sub dimension {
 		my %data = $self->{data}->();
 		my $key = join "-",$title,'width';
 		$data{options}->{$key} = $width if $width;
-		$width = $data{options}->{$key} if ! $width;
+		$width = $data{options}->{$key} unless $width;
 		$key = join "-",$title,'height';
 		$data{options}->{$key} = $height if $height;
-		$height = $data{options}->{$key} if ! $height;
+		$height = $data{options}->{$key} unless $height;
 	}
 	(_value_or_else(50, $width),_value_or_else(10, $height))
 }
