@@ -68,7 +68,7 @@ use Exporter::Easy (
 		get_dollars
 		set_dollars
 		place_given
-		given_fill_dollars
+		given_meet_dollars
 		resolve_dollar
 		clipdir
 		next_clip
@@ -212,7 +212,7 @@ sub place_given {
 	get_dollars $input, @gin;
 	set_dollars $input
 }
-sub given_fill_dollars {
+sub given_meet_dollars {
 	@given == keys %dollars
 }
 my ($obj, $window, $width);
@@ -266,7 +266,6 @@ sub clip_menu {
 }
 sub resolve_dollar {
 	my $input = shift;
-	my @types = _file_types(shift);
 	my $output = '';
 	my @results = @_;
 	if (@results) {
@@ -275,6 +274,7 @@ sub resolve_dollar {
 		});
 		return $output;
 	}
+	my @types = _file_types(Settings->apply('Associations'));
 	%dollars = get_dollars $input;
 	my $dlg = $window->DialogBox(
 		-title => $input,

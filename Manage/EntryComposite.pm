@@ -213,7 +213,9 @@ sub options_menu {
 		}
 	);
 }
-sub item { $_[0]->{item}=$_[1] if defined $_[1]; $_[0]->{item} }
+sub item { 
+	$_[0]->{item}=$_[1] if defined $_[1]; $_[0]->{item} 
+}
 sub give {
 	my $self = shift;
 	my $item = shift;

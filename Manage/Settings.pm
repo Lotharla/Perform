@@ -240,9 +240,7 @@ given (_getenv_once('test', 0)) {
 	when (_lt 0) {
 		tie my %data, "PersistHash", $_entries;
 		_text_info undef, "file types", pp(Settings->apply('Associations', %data));
-		MainLoop;
 		_text_info undef, "Environment", pp(Settings->apply('Environment', %data));
-		MainLoop;
 	}
 	default {
 		1

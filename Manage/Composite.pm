@@ -57,24 +57,30 @@ sub mode {
 	$mode
 }
 sub dimension {
-	my ($self,$title,$width,$height) = @_;
+	my ($self,$name,$width,$height) = @_;
 	if ($self->{data}) {
 		my %data = $self->{data}->();
-		my $key = join "-",$title,'width';
-		$data{options}->{$key} = $width if $width;
-		$width = $data{options}->{$key} unless $width;
-		$key = join "-",$title,'height';
-		$data{options}->{$key} = $height if $height;
-		$height = $data{options}->{$key} unless $height;
+		my $key = join "-",$name,'width';
+		if ($width) {
+			$data{options}->{$key} = $width;
+		} else {
+			$width = $data{options}->{$key};
+		}
+		$key = join "-",$name,'height';
+		if ($height) {
+			$data{options}->{$key} = $height;
+		} else {
+			$height = $data{options}->{$key};
+		}
 	}
 	(_value_or_else(50, $width),_value_or_else(10, $height))
 }
 sub ask_dimension {
 	my $self = shift;
-	my $title = shift;
-	my ($width,$height) = $self->dimension($title);
+	my $name = shift;
+	my ($width,$height) = $self->dimension($name);
 	my $dlg = $self->{window}->DialogBox(
-		-title => "$title dimension",
+		-title => "$name dimension",
 		-buttons => ['OK', 'Cancel'],
 		-default_button => 'Cancel');
 	$dlg->Label( -text => 'Width' )->grid(-row => 0, -column => 0);
@@ -89,7 +95,7 @@ sub ask_dimension {
 	)->grid(-row => 1, -column => 1);
 	given ($dlg->Show) {
 		when ('OK') {
-			$self->dimension($title, $width, $height);
+			$self->dimension($name, $width, $height);
 			1
 		}
 		default {

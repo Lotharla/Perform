@@ -24,12 +24,19 @@ use Manage::Resolver qw(
 	@given 
 	given_title
 	place_given
+	given_meet_dollars
 	resolve_dollar
 );
 use Manage::Alias qw(
 	ask_alias
 	resolve_alias
 	install_alias_button
+);
+use Manage::Favor qw(
+	organize_favor
+	install_favor_button
+	find_favorite
+	inc_favor
 );
 use Manage::Settings;
 use Manage::EntryComposite;
@@ -63,16 +70,30 @@ sub initialize {
 		_set_selection($self->{entry});
 	});
 	$submenu->configure('-underline', 0);
+	$submenu = install_favor_button($menu, 'Favorites', sub { 
+		my $f = shift;
+		my @fave = find_favorite($f);
+		if (@fave > 2) {
+			$self->item($fave[2]);
+			$self->commit($f);
+		}
+		_set_selection($self->{entry});
+	});
+	$submenu->configure('-underline', 0);
 	$submenu = _install_menu($menu, 
 		sub {
 			my $dollar = has_dollar($self->item);
 			my $given = @given > 0;
-			$submenu->entryconfigure(1, -state => $given ? 'normal' : 'disabled');
-			$submenu->entryconfigure(2, -state => $given && $dollar ? 'normal' : 'disabled');
-			$submenu->entryconfigure(3, -state => $dollar ? 'normal' : 'disabled');
+			$submenu->entryconfigure(2, -state => $given ? 'normal' : 'disabled');
+			$submenu->entryconfigure(3, -state => $given && $dollar ? 'normal' : 'disabled');
+			$submenu->entryconfigure(4, -state => $dollar ? 'normal' : 'disabled');
 		}, 
-		"Alias ...", sub {
-			ask_alias
+		"Organize aliases ...", sub {
+			my ($path, $value) = ask_alias(undef,$self->item);
+			$self->item($value) if $path;
+		}, 
+		"Organize favorites ...", sub {
+			organize_favor(undef,0,'',$self->item);
 		}, 
 		"Given ...", sub {
 			my @dim = $self->dimension("text");
@@ -132,6 +153,7 @@ sub populate {
     $self->SUPER::populate($mode);
 	if ($mode > 1) {
 		Manage::Alias::inject($self);
+		Manage::Favor::inject($self);
 		Manage::Resolver::inject($self);
 	}
 	$self->pre_select($given[0]);
@@ -153,17 +175,27 @@ sub pre_select {
 }
 sub pre_commit {
 	my $self = shift;
+	my $name = shift;
 	my $output = $self->item;
 	if (has_dollar($output)) {
-		$output = resolve_dollar($output, Settings->apply('Associations'), @_);
+		if ($name) {
+			my $result = place_given($output);
+			if (given_meet_dollars) {
+				$self->item($result);
+				inc_favor $name, 1;
+				return 1;
+			}
+		}
+		$output = resolve_dollar($output);
 		return 0 unless $output;
 	}
 	$self->item($output);
+	inc_favor $name, 1 if $name;
 	1
 }
 sub commit {
 	my $self = shift;
-	if (not $self->pre_commit) {
+	if (not $self->pre_commit(@_)) {
 		return
 	}
 	$self->SUPER::commit();

@@ -114,6 +114,8 @@ use Exporter::Easy (
 		_refresh_menu_button_items
 		_install_menu_button
 		_win32
+		_transit
+		_dimension
 		$_entries $_history
 	)],
 );
@@ -698,6 +700,7 @@ sub _center_window {
 	my $win = shift;
 	$win->withdraw; # avoid the jumping window bug 
 	$win->Popup;
+	MainLoop if shift;
 }
 sub __center_window {
 	my $win = shift;
@@ -709,7 +712,7 @@ sub __center_window {
 	$win->geometry("+$xpos+$ypos");
 	$win->deiconify;  # Show the window again
 }
-sub _key_event {
+sub __key_event {
     my($c) = @_;
     my $e = $c->XEvent;
     my( $x, $y, $W, $K, $A ) = ( $e->x, $e->y, $e->K, $e->W, $e->A );
@@ -720,9 +723,9 @@ sub _key_event {
     say "  K = $K (Symbolic keysym)";
     say "  A = $A (ASCII character)";
 }
-sub _key_event_check {
+sub __key_event_check {
 	my $top = shift;
-	$top->bind( '<Any-KeyPress>' => sub {_key_event(@_)});
+	$top->bind( '<Any-KeyPress>' => sub {__key_event(@_)});
 }
 sub _tkinit {
 	my $top = tkinit;
@@ -769,7 +772,8 @@ sub _text_menu_extension {
 	$text_widget
 }
 sub _text_info {
-	my $top = _value_or_else sub{_tkinit(1)}, shift;
+	my $main_loop = 0;
+	my $top = _value_or_else sub { $main_loop = 1; _tkinit(1) }, shift;
 	$top->title(_value_or_else('', shift));
 	my $text = shift;
 	my %menu_items = @_;
@@ -778,7 +782,7 @@ sub _text_info {
 	$widget->pack(-side => 'left', -fill => 'both', -expand => 1);
 	$widget->insert('end', $text);
 	_text_menu_extension($widget, %menu_items);
-	_center_window $top;
+	_center_window $top, $main_loop;
 }
 sub _text_dialog {
 	my $win = _value_or_else sub{_tkinit(1)}, shift;
@@ -886,7 +890,7 @@ sub _file_types {
 sub _ask_file {
 	my $save = looks_like_number $_[-1] ? $_[-1] : 0;
 	my $top = _value_or_else sub{_tkinit(1)}, shift;
-	my $default = ($save ? "Save" : "Open") . ' file';
+	my $default = $save ? "Save" : "Open";
 	my $title = _value_or_else $default, shift;
 	my $file = _value_or_else sub{_implicit [$title,$default]}, shift;
 	my @types = _array(shift);
@@ -1012,6 +1016,22 @@ sub _install_menu_button {
 	);
 	_refresh_menu_button_items $win, $title, $btn, $command, @items;
 	$btn
+}
+sub _transit {
+	my $obj = shift;
+	my $name = shift;
+	my $method = UNIVERSAL::can($obj, $name);
+	return $method->($obj, @_) if $method;
+	$method
+}
+sub _dimension {
+	my $obj = shift;
+	my $name = shift;
+	my @dim = @_;
+	if (UNIVERSAL::can($obj,'dimension')) {
+		@dim = $obj->dimension($name);
+	}
+	@dim
 }
 our $_entries = catfile dirname(dirname  __FILE__), ".entries";
 our $_history = catfile dirname(dirname  __FILE__), ".history";

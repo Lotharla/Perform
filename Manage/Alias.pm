@@ -27,6 +27,7 @@ use Manage::Utils qw(
 	$_entries
 	@_separator
 	_visit_sorted_tree
+	_dimension
 );
 use Manage::PersistHash;
 use Manage::Resolver qw(
@@ -112,13 +113,10 @@ sub visit_alias_tree {
 	_visit_sorted_tree $data{'alias'}, shift
 }
 sub ask_alias {
-	my ($path, $value, $launch)= @_;
-	my @buttons = $path ? 
-		('OK','Add/Update','Remove','Cancel') :
-		('Add/Update','Remove','Close');
-	if (! $path && UNIVERSAL::can($obj,'item')) {
-		$value = $obj->item;
-	}
+	my ($path, $value, $three_buttons)= @_;
+	my @buttons = $three_buttons
+		? ('Add/Update','Remove','Close')
+		: ('OK','Add/Update','Remove','Cancel');
 	my $dlg = $window->DialogBox(
 		-title => "Alias",
 		-buttons => \@buttons,
@@ -138,32 +136,22 @@ sub ask_alias {
 		-variable => \$path
 	)->grid(-row => 0, -column => 1);
 	$dlg->Label( -text => 'Value' )->grid(-row => 1, -column => 0);
-	my @dim = (50,5);
-	if (! $path && UNIVERSAL::can($obj,'dimension')) {
-		@dim = $obj->dimension("alias-text");
-	}
+	my @dim = _dimension($obj,'entry',50);
 	$en = $dlg->Entry( 
 		-takefocus => 1,
 		-width => $dim[0],
 		-textvariable => \$value
 	)->grid(-row => 1, -column => 1);
-=pod
-	$dlg->Checkbutton(
-		-text => 'launch immediately',
-		-onvalue => 1, -offvalue => 0, 
-		-variable => \$launch
-	)->grid(-row => 2, -column => 1)->configure(-state => 'disabled');
-=cut
 	_set_selection($en);
 	given($dlg->Show) {
-		when ($buttons[@buttons > 3 ? 0 : -1]) {
+		when ($buttons[$three_buttons ? -1 : 0]) {
 			return ($path, $value)
 		}
-		when ($buttons[@buttons > 3 ? 1 : 0]) {
+		when ($buttons[$three_buttons? 0 : 1]) {
 			update_alias $path, $value;
 			ask_alias($path, $value)
 		}
-		when ($buttons[@buttons > 3 ? 2 : 1]) {
+		when ($buttons[$three_buttons ? 1 : 2]) {
 			update_alias $path;
 			ask_alias($path, $value)
 		}
@@ -224,7 +212,7 @@ sub create_alias_menu {
 			-variable => \$modify,
 			-command => sub { 
 				if ($modify) {
-					ask_alias "", "";
+					ask_alias();
 				}
 				cancel_popup; 
 			}
@@ -278,8 +266,7 @@ given (_getenv_once('test', 0)) {
 		tie %data, "PersistHash", $_entries;
 		$window = _tkinit(0);
 		install_alias_popup_button('Alias', sub { say pp @_ })->pack;
-		_center_window ($window);
-		MainLoop();
+		_center_window $window, 1;
 	}
 	when (_gt 1) {
 		my $file = "/tmp/.entries";
@@ -288,8 +275,7 @@ given (_getenv_once('test', 0)) {
 		inject(%data);
 		$window = _tkinit(0);
 		install_alias_button(_menu($window), 'Alias', sub { say pp @_ });
-		_center_window ($window);
-		MainLoop();
+		_center_window $window, 1;
 		dump \%data;
 	}
 	when (_gt 0) {
@@ -308,8 +294,7 @@ given (_getenv_once('test', 0)) {
 		cascades _menu($window), 'Alias', sub { 
 			say pp ask_alias(@_);
 		};
-		_center_window ($window);
-		MainLoop();
+		_center_window $window, 1;
 		dump \%data;
 	}
 	when (_lt -1) {

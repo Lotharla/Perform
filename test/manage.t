@@ -412,11 +412,6 @@ unlink $file;
 	$temp = PersistHash::fetch({}, $file);
 	is_deeply $temp->{hash}, $data{hash};
 }
-$p = dirname(__FILE__);
-ok !_string_contains($p, '~');
-$p =~ s/$home/~/;
-ok _string_contains $p, '~', 1;
-is _realpath($p), dirname(__FILE__);
 =pod
 {
 	tie my %data, "PersistHash", $_history, 1;
@@ -425,4 +420,9 @@ is _realpath($p), dirname(__FILE__);
 	$data{$_} = $history{$_} foreach keys %history;
 }
 =cut
+$p = dirname(__FILE__);
+ok !_string_contains($p, '~');
+$p =~ s/$home/~/;
+ok _string_contains $p, '~', 1;
+is _realpath($p), dirname(__FILE__);
 exit;

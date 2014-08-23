@@ -91,7 +91,6 @@ given ($modifier) {
 				_contents_to_file $file, $text;
 			}
 		};
-		MainLoop;
 	}
 	default {
 		_perform $command
