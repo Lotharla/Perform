@@ -18,6 +18,7 @@ use Manage::Utils qw(
 	_menu
 	_install_menu
 	@_separator
+	_clipboard
 );
 use Manage::Resolver qw(
 	has_dollar
@@ -84,9 +85,9 @@ sub initialize {
 		sub {
 			my $dollar = has_dollar($self->item);
 			my $given = @given > 0;
-			$submenu->entryconfigure(2, -state => $given ? 'normal' : 'disabled');
-			$submenu->entryconfigure(3, -state => $given && $dollar ? 'normal' : 'disabled');
-			$submenu->entryconfigure(4, -state => $dollar ? 'normal' : 'disabled');
+			$submenu->entryconfigure(3, -state => $given ? 'normal' : 'disabled');
+			$submenu->entryconfigure(4, -state => $given && $dollar ? 'normal' : 'disabled');
+			$submenu->entryconfigure(5, -state => $dollar ? 'normal' : 'disabled');
 		}, 
 		"Organize aliases ...", sub {
 			my ($path, $value) = ask_alias(undef,$self->item);
@@ -95,9 +96,10 @@ sub initialize {
 		"Organize favorites ...", sub {
 			organize_favor(undef,0,'',$self->item);
 		}, 
+		'-' => '',
 		"Given ...", sub {
 			my @dim = $self->dimension("text");
-			if (_text_dialog $self->{window}, \@dim, "Given", \@given, 1) {
+			if (_text_dialog $self->{window}, \@dim, "Given", \@given) {
 				my @parts = split /$_separator[0]/, $self->{window}->title;
 				$self->{window}->title(given_title $parts[0]);
 			}
@@ -107,11 +109,10 @@ sub initialize {
 			_set_selection($self->{entry});
 		},
 		"Resolve '\$...'", sub{$self->pre_commit}, 
+		'-' => '',
 		"Clipper ...", sub {
 			use Manage::PageComposite;
-			(new PageComposite(
-				title => 'Clipper', 
-			))->relaunch;
+			(new PageComposite(title => 'Clipper'))->relaunch;
 		}, 
 		'Edit'
 	);

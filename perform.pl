@@ -51,12 +51,12 @@ my $command = _capture_output(
 						$value = _value_or_else ' ', $self->{modifier};
 					}
 				)->cget('-menu');
+				$submenu->radiobutton(-label=>"normal", -value => ' ', 
+					-variable => \$value, -command => sub{ $self->{modifier} = ' ' });
 				$submenu->radiobutton(-label=>"in terminal", -value => 'Alt', 
 					-variable => \$value, -command => sub{ $self->{modifier} = 'Alt' });
 				$submenu->radiobutton(-label=>"capture output", -value => 'Control', 
 					-variable => \$value, -command => sub{ $self->{modifier} = 'Control' });
-				$submenu->radiobutton(-label=>"normal", -value => ' ', 
-					-variable => \$value, -command => sub{ $self->{modifier} = ' ' });
 				$submenu->separator;
 				$submenu->checkbutton(-label=>"immediately", -onvalue => 1, -offvalue => 0, 
 					-variable => \$self->{immediate}, -command => sub{
@@ -70,6 +70,8 @@ my $command = _capture_output(
 	}
 );
 exit unless $command;
+use Manage::Settings;
+Settings->apply('Environment');
 sub terminalize {
 	my $output = _flatten $_[0];
 	$output = _escapeDoubleQuotes $output;
@@ -84,7 +86,7 @@ given ($modifier) {
 	when ('Control') {
 		my $text = _result_perform $command;
 		_text_info undef, $command, $text, 'Save text' => sub {
-			my ($label,$parent,$widget) = @_;
+			my ($label,$widget,$parent) = @_;
 			my $file = next_clip;
 			$file = _ask_file($parent, $label, $file, [], 1);
 			if ($file) {

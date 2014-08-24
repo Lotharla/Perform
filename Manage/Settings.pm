@@ -235,6 +235,7 @@ given (_getenv_once('test', 0)) {
 	when (_gt 0) {
 		my $dir = clipdir;
 		my @files = _files_in_dir($dir, 1);
+		use Manage::PageComposite;
 		(new PageComposite('title', $dir, 'params', \@files))->relaunch;
 	}
 	when (_lt 0) {

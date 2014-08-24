@@ -189,12 +189,12 @@ sub _value_or_else {
 			return _array $key;
 		}
 		default {
-			given (ref($value)) {
+			given (ref $value) {
 				when ('ARRAY') {
 					my @value = @{$value};
 					return defined $value[$key] ? $value[$key] : _value_or_else($default);
 				}
-				when ($_ eq 'HASH' || _is_blessed($value)) {
+				when (_eq 'HASH' || _is_blessed($value)) {
 					my %value = %{$value};
 					return exists $value{$key} ? $value{$key} : _value_or_else($default);
 				}
@@ -756,7 +756,9 @@ sub _message {
 	$result
 }
 sub _text_menu_extension {
-	my $widget = shift;
+	my $widgets = shift;
+	my $widget = _value_or_else $widgets,0,$widgets;
+	my $parent = _value_or_else $widget->parent,1,$widgets;
 	my %menu_items = @_;
 	my $text_widget = $widget->Subwidget('scrolled');
 	if (%menu_items) {
@@ -765,7 +767,7 @@ sub _text_menu_extension {
 		foreach (keys %menu_items) {
 			$menu->command(
 				-label => $_, 
-				-command => [$menu_items{$_},$_,$widget->parent,$widget]
+				-command => [$menu_items{$_},$_,$widget,$parent]
 			)
 		}
 	}
@@ -789,17 +791,13 @@ sub _text_dialog {
 	my $dim = shift;
 	my $title = shift;
 	my $text = shift;
-	my $buttons = ['OK','Cancel'];
-	given (@_ % 2 ? shift : 0) {
-		when (1) {
-			splice @$buttons, 1, 0, 'To clipboard';
-		}
-	}
 	my %menu_items = @_;
+	my $buttons = ['OK','Cancel'];
 	my $dlg = $win->DialogBox(
 		-title => $title,
 		-buttons => $buttons);
 	$dlg->bind('<KeyPress-Return>', sub {});
+	my $book;
 	my $text_widget = sub {
 		my $parent = shift;
 		my $text = shift;
@@ -813,9 +811,8 @@ sub _text_dialog {
 		my $widget = $parent->Scrolled("Text", @params);
 		$widget->pack(-fill => 'both', -expand => 1);
 		$widget->insert('end', $text);
-		_text_menu_extension($widget, %menu_items)
+		_text_menu_extension([$widget,$book], %menu_items)
 	};
-	my $book;
 	my @widgets;
 	if (_is_array_ref $text) {
 		use Tk::NoteBook;
@@ -833,15 +830,7 @@ sub _text_dialog {
 	} else {
 		push @widgets, &$text_widget($dlg, $text);
 	}
-show:
 	given ($dlg->Show) {
-		when ('To clipboard') {
-			my $page = $book->page_widget($book->raised);
-			my @kids = $page->children;
-			my $text_widget = $kids[0]->Subwidget('scrolled');
-			_clipboard $text_widget->getSelected();
-			goto show
-		}
 		when ('OK') {
 			if (_is_array_ref $text) {
 				my $i = 0;
