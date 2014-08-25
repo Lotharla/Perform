@@ -225,7 +225,14 @@ sub apply {
 		}
 	}
 }
-given (_getenv_once('test', 0)) {
+sub strings {
+	my $class = shift;
+	given (shift) {
+		when ('run') { return ["normal","in terminal","capture output"] }
+	}
+	[]
+}
+given (_getenv_once('_test', 0)) {
 	when (_gt 1) {
 		(new Settings(
 			title => 'Settings',
@@ -233,12 +240,6 @@ given (_getenv_once('test', 0)) {
 			params => ['Associations','Environment']))->relaunch;
 	}
 	when (_gt 0) {
-		my $dir = clipdir;
-		my @files = _files_in_dir($dir, 1);
-		use Manage::PageComposite;
-		(new PageComposite('title', $dir, 'params', \@files))->relaunch;
-	}
-	when (_lt 0) {
 		tie my %data, "PersistHash", $_entries;
 		_text_info undef, "file types", pp(Settings->apply('Associations', %data));
 		_text_info undef, "Environment", pp(Settings->apply('Environment', %data));

@@ -76,9 +76,11 @@ sub initialize {
 		my @fave = find_favorite($f);
 		if (@fave > 2) {
 			$self->item($fave[2]);
+			$self->modifier($fave[3]);
 			$self->commit($f);
+		} else {
+			_set_selection($self->{entry});
 		}
-		_set_selection($self->{entry});
 	});
 	$submenu->configure('-underline', 0);
 	$submenu = _install_menu($menu, 

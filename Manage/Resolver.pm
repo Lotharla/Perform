@@ -52,6 +52,7 @@ use Manage::Utils qw(
 	@_separator
 	_realpath
 );
+use Manage::Settings;
 use Exporter::Easy (
 	OK => [ qw(
 		@given

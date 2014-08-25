@@ -31,6 +31,7 @@ use Manage::Utils qw(
 	_create_popup_menu
 	_delete_popup_menu
 );
+use Manage::Settings;
 use Manage::Resolver qw(
 	clipdir
 	next_clip

@@ -33,30 +33,27 @@ use Manage::Resolver qw(
 	next_clip
 );
 use Manage::Composer;
-my $modifier;
+my $composer;
 my $command = _capture_output(
 	sub {
 		my $title = given_title("Perform ...");
 		my $label = _getenv('label', '');
-		my $obj = new Composer( 
+		$composer = new Composer( 
 			title => $title,
 			label => $label,
 			file => $_entries,
 			history_db => $_history,
 			extendMenu => sub {
 				my ($self, $menu) = @_;
-				my ($submenu, $value);
-				$submenu = $menu->cascade(-label=>'Run', -underline=>0, -tearoff => 'no', 
-					-postcommand => sub {
-						$value = _value_or_else ' ', $self->{modifier};
-					}
-				)->cget('-menu');
-				$submenu->radiobutton(-label=>"normal", -value => ' ', 
-					-variable => \$value, -command => sub{ $self->{modifier} = ' ' });
-				$submenu->radiobutton(-label=>"in terminal", -value => 'Alt', 
-					-variable => \$value, -command => sub{ $self->{modifier} = 'Alt' });
-				$submenu->radiobutton(-label=>"capture output", -value => 'Control', 
-					-variable => \$value, -command => sub{ $self->{modifier} = 'Control' });
+				my $submenu = $menu->cascade(-label=>'Run', -underline=>0, -tearoff => 'no')->cget('-menu');
+				my @runopts = @{Settings->strings('run')};
+				for my $opt (0..$#runopts) {
+					my $value = $self->modifier('',$opt);
+					$submenu->radiobutton(-label => $runopts[$opt],
+						-value => $value, 
+						-variable => \$self->{modifier},
+						-command => sub{ $self->modifier($opt) });
+				}
 				$submenu->separator;
 				$submenu->checkbutton(-label=>"immediately", -onvalue => 1, -offvalue => 0, 
 					-variable => \$self->{immediate}, -command => sub{
@@ -65,8 +62,7 @@ my $command = _capture_output(
 					});
 			}
 		);
-		$obj->relaunch;
-		$modifier = $obj->{modifier};
+		$composer->relaunch;
 	}
 );
 exit unless $command;
@@ -79,7 +75,7 @@ sub terminalize {
 	my $terminal = _chomp(`gconftool-2 -g /desktop/gnome/applications/terminal/exec`);
 	return _combine( "$terminal", "-t", sprintf("\"%s\"", $output), "-e", "\"$output\"" );
 }
-given ($modifier) {
+given ($composer->modifier) {
 	when ('Alt') {
 		_perform terminalize $command
 	}

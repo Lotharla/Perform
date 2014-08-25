@@ -9,6 +9,7 @@ use Tk::PNG;
 use Tk::JPEG;
 use Tk::DialogBox;
 use Tk::NumEntry;
+use Tk::BrowseEntry;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(dirname abs_path __FILE__);
@@ -18,6 +19,7 @@ use Manage::Utils qw(
 	_is_blessed
 	_getenv_once 
 	_value_or_else 
+	_index_of
 	_file_exists
 	_fileparse
 	_filename_extension
@@ -33,6 +35,7 @@ use Manage::Utils qw(
 	_implicit
 );
 use Manage::PersistHash;
+use Manage::Settings;
 use Exporter::Easy (
 	OK => [ qw(
 		find_favorite
@@ -77,15 +80,26 @@ sub inc_favor {
 	$fave[0] += shift;
 	update_favorite $name, @fave;
 }
+sub runopts {
+	my @runopts = @{Settings->strings('run')};
+	return @runopts if $#_ < 0;
+	my $i = _value_or_else 0,$_[0];
+	$runopts[$i]
+}
 sub organize_favor {
-	my ($name, $favor, $file, $command) = @_;
+	my ($name, $favor, $file, $command, $runopt) = @_;
 	my $find = sub {
 		my @fave = find_favorite shift;
 		$favor = $fave[0];
 		$file = $fave[1];
 		$command = $fave[2];
+		$runopt = runopts $fave[3];
 	};
-	$find->($name) if $name;
+	if ($name) {
+		$find->($name);
+	} else {
+		$runopt = runopts $runopt;
+	}
 	my $buttons = ['Add/Update', 'Remove', 'Close'];
 	my $dlg = $window->DialogBox(
 		-title => 'Favorites',
@@ -115,28 +129,46 @@ sub organize_favor {
 				$pic = picture($file, $pic, $btn);
 			}
 		}
-	)->grid(-row => 0, -column => 0);
+	)->grid(-row => 0, -column => 0, -sticky => 'e');
 	$pic = picture($file, $pic, $btn);
-	my $en = $pnl->Entry( 
+	my ($en,$be);
+	$en = $pnl->Entry( 
 		-width => 20,
 		-textvariable => \$name
-	)->grid(-row => 0, -column => 1);
+	)->grid(-row => 0, -column => 1, -sticky => 'w');
+	$pnl->Label(
+		-text => 'Favor',
+	)->grid(-row => 1, -column => 0, -sticky => 'e');
 	$pnl->NumEntry(
 		-minvalue => 0,
 		-maxvalue => 100,
 		-textvariable => \$favor,
-	)->grid(-row => 0, -column => 2);
+	)->grid(-row => 1, -column => 1, -sticky => 'w');
+	$pnl->Label(
+		-text => 'Run',
+	)->grid(-row => 2, -column => 0, -sticky => 'e');
+	$be = $pnl->BrowseEntry(
+		-listcmd => sub {
+			$be->delete(0,'end');
+			$be->insert('end', $_) foreach runopts;
+		},
+		-variable => \$runopt
+	)->grid(-row => 2, -column => 1, -sticky => 'w');
+	$be->Subwidget("entry")->configure(-state => 'readonly');
+	$be->Subwidget("slistbox")->configure(-height => 5);
 	my @dim = _dimension($obj,'entry',50);
 	$pnl->Entry( 
 		-width => $dim[0],
 		-textvariable => \$command,
-	)->grid(-row => 1, -column => 0, -columnspan => 3);
+	)->grid(-row => 3, -column => 0, -columnspan => 2);
 	_set_selection($en);
 	given($dlg->Show) {
 		when ($buttons->[0]) {
 			$file = photo_file($pic);
-			update_favorite($name, $favor, $file, $command);
-			organize_favor($name, $favor, $file, $command);
+			$runopt = _index_of $runopt, runopts;
+			my @params = ($name, $favor, $file, $command, $runopt);
+			update_favorite(@params);
+			organize_favor(@params);
 		}
 		when ($buttons->[1]) {
 			update_favorite($name);
