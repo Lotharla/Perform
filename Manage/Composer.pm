@@ -13,6 +13,7 @@ use Manage::Utils qw(
 	_is_value
 	_value_or_else 
 	_getenv
+	_setenv
 	_set_selection
 	_text_dialog
 	_menu
@@ -22,10 +23,11 @@ use Manage::Utils qw(
 );
 use Manage::Resolver qw(
 	has_dollar
-	@given 
-	given_title
-	place_given
-	given_meet_dollars
+	@inputs 
+	set_inputs
+	inputs_title
+	place_inputs
+	inputs_meet_dollars
 	resolve_dollar
 );
 use Manage::Alias qw(
@@ -86,10 +88,10 @@ sub initialize {
 	$submenu = _install_menu($menu, 
 		sub {
 			my $dollar = has_dollar($self->item);
-			my $given = @given > 0;
-			$submenu->entryconfigure(3, -state => $given ? 'normal' : 'disabled');
-			$submenu->entryconfigure(4, -state => $given && $dollar ? 'normal' : 'disabled');
-			$submenu->entryconfigure(5, -state => $dollar ? 'normal' : 'disabled');
+			my $inputs = @inputs > 0;
+			$submenu->entryconfigure(4, -state => $inputs ? 'normal' : 'disabled');
+			$submenu->entryconfigure(5, -state => $inputs && $dollar ? 'normal' : 'disabled');
+			$submenu->entryconfigure(6, -state => $dollar ? 'normal' : 'disabled');
 		}, 
 		"Organize aliases ...", sub {
 			my ($path, $value) = ask_alias(undef,$self->item);
@@ -99,15 +101,23 @@ sub initialize {
 			organize_favor(undef,0,'',$self->item);
 		}, 
 		'-' => '',
-		"Given ...", sub {
+		"Input from clipboard", sub {
 			my @dim = $self->dimension("text");
-			if (_text_dialog $self->{window}, \@dim, "Given", \@given) {
-				my @parts = split /$_separator[0]/, $self->{window}->title;
-				$self->{window}->title(given_title $parts[0]);
+			my $text = _text_dialog $self->{window}, \@dim, "Input from clipboard", '';
+			if ($text) {
+				_setenv('inputs', _value_or_else($text,1,$text));
+				set_inputs();
+				$self->update_title;
+			}
+		},
+		"Input ...", sub {
+			my @dim = $self->dimension("text");
+			if (_text_dialog $self->{window}, \@dim, 'Inputs', \@inputs) {
+				$self->update_title;
 			}
 		}, 
-		'Place given', sub {
-			$self->item(place_given($self->item));
+		'Place input', sub {
+			$self->item(place_inputs($self->item));
 			_set_selection($self->{entry});
 		},
 		"Resolve '\$...'", sub{$self->pre_commit}, 
@@ -150,6 +160,11 @@ sub options_menu {
 	my $menu = shift;
 	$self->SUPER::options_menu($menu) if defined($menu);
 }
+sub update_title {
+	my $self = shift;
+	my @parts = split /$_separator[0]/, $self->{window}->title;
+	$self->{window}->title(inputs_title $parts[0]);
+}
 sub populate {
 	my $self = shift;
     my $mode = shift;
@@ -159,7 +174,7 @@ sub populate {
 		Manage::Favor::inject($self);
 		Manage::Resolver::inject($self);
 	}
-	$self->pre_select($given[0]);
+	$self->pre_select($inputs[0]);
 }
 sub pre_select {
 	my $self = shift;
@@ -170,7 +185,7 @@ sub pre_select {
 		if ($found) {
 			$found = resolve_alias($found);
 			if ($found) {
-				$found = place_given($found);
+				$found = place_inputs($found);
 				$self->give($found);
 			}
 		}
@@ -182,8 +197,8 @@ sub pre_commit {
 	my $output = $self->item;
 	if (has_dollar($output)) {
 		if ($name) {
-			my $result = place_given($output);
-			if (given_meet_dollars) {
+			my $result = place_inputs($output);
+			if (inputs_meet_dollars) {
 				$self->item($result);
 				inc_favor $name, 1;
 				return 1;

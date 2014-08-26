@@ -34,9 +34,9 @@ use Manage::Alias qw(
 );
 use Manage::Settings;
 use Manage::Resolver qw(
-	place_given
-	@given
-	set_given
+	place_inputs
+	@inputs
+	set_inputs
 );
 use Manage::Composer;
 use Manage::Composite;
@@ -98,8 +98,8 @@ is $data{'alias'}->{$alias}, $ntd;
 tie %data, "PersistHash", $hist, 1;
 my @history = values %{$data{'hash'}};
 ok _array_contains(\@history, $dtn);
-_setenv 'given', "1.xxx\n2.yyy\n3.zzz";
-set_given;
+_setenv 'inputs', "1.xxx\n2.yyy\n3.zzz";
+set_inputs;
 {
 	my $composer = new Composer(
 		file => $entr, 
@@ -136,10 +136,10 @@ here:
 {
 	_clipboard $ddd[0];
 	my $win = _tkinit(0);
-	_text_dialog $win, [20,3], "Given", \@given, 1;
+	_text_dialog $win, [20,3], 'Inputs', \@inputs;
 	my $canvas = $win->Scrolled('Canvas', -width => 300, -height => 400);
 	my $i;
-	$canvas->createText(100, 10+100*($i++), -text => $_) foreach (@given, _get_clipboard);
+	$canvas->createText(100, 10+100*($i++), -text => $_) foreach (@inputs, _get_clipboard);
 	$canvas->pack;
 	MainLoop();
 }

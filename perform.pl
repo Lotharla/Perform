@@ -28,15 +28,15 @@ use Manage::Utils qw(
 	$_entries $_history
 );
 use Manage::Resolver qw(
-	@given
-	given_title
+	@inputs
+	inputs_title
 	next_clip
 );
 use Manage::Composer;
 my $composer;
 my $command = _capture_output(
 	sub {
-		my $title = given_title("Perform ...");
+		my $title = inputs_title("Perform ...");
 		my $label = _getenv('label', '');
 		$composer = new Composer( 
 			title => $title,

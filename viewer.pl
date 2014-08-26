@@ -16,13 +16,13 @@ use Manage::Utils qw(
 	_text_info
 );
 use Manage::Resolver qw(
-	@given
-	given_title
+	@inputs
+	inputs_title
 );
 use Manage::PageComposite;
-my $params = @given ? \@given : \@ARGV;
+my $params = @inputs ? \@inputs : \@ARGV;
 (new PageComposite(
-	title => given_title("View files ..."), 
+	title => inputs_title("View files ..."), 
 	width => _getenv('width'),
 	params => $params
 ))->relaunch;

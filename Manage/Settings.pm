@@ -38,6 +38,7 @@ use Manage::Utils qw(
 	_flip_hash
 	_text_info
 	_visit_sorted_tree
+	_childWidgetByName
 );
 use Manage::Resolver qw(
 	clipdir
@@ -63,24 +64,10 @@ sub initialize {
     my( $self ) = @_;
     $self->{data} = $self->data() unless $self->{data};
     $self->SUPER::initialize();
-	$self->{book} = $self->{window}->NoteBook();
-    $self->{book}->grid(-row => 0, -column => 0, -columnspan => 2);
+	$self->{book} = $self->{window}->NoteBook(
+	)->grid(-row => 0, -column => 0, -columnspan => 2);
 	$self->populate($self->mode);
-	my ($en,$be);
-	$en = $self->{window}->Entry( -width => 25,
-		-textvariable => \$self->{key})->grid(-row => 1, -column => 0);
-	$be = $self->{window}->BrowseEntry(
-		-listcmd => sub {
-			$be->delete(0,'end');
-			my %data = $self->{data}->();
-			_visit_sorted_tree $data{'alias'}, sub {
-				$be->insert('end', $_[0]) unless has_dollar $_[0];
-			};
-		},
-		-variable => \$self->{value}
-	)->grid(-row => 1, -column => 1);
 	$self->bottom;
-	_set_selection($en);
 	_center_window($self->{window});
 }
 sub bottom {
@@ -109,17 +96,14 @@ sub populate {
     my $mode = shift;
     $self->{names} = {};
 	my @params = @{$self->{params}};
-    if (@params) {
-		foreach (@params) {
-			$self->page($_)
-		}
-	} else {
-		$self->page()
+	foreach (@params) {
+		$self->page($_);
 	}
 }
 sub page {
 	my $self = shift;
 	my $name = shift;
+	my $frm;
 	my $page = $self->{book}->add($name, 
 		-label => $name, 
 		-raisecmd => sub {
@@ -128,14 +112,16 @@ sub page {
 			}
 			$self->{name} = $self->{book}->raised;
 			($self->{key}, $self->{value}) = @{$self->{names}->{$self->{name}}}[1,2];
+			_set_selection(_childWidgetByName($frm, 'entry'));
 		} 
 	);
+	$frm = $page->Frame->pack(-side => 'bottom', -fill => 'x', -expand => 1);
 	my $widget = $page->Scrolled('MListbox',
 		-selectmode => 'browse', 
 		-scrollbars => 'oe',
 	    -bd => 2,
 	    -relief => 'sunken'
-	)->pack(-fill => 'both', -expand => 1);
+	)->pack(-side => 'top', -fill => 'x', -expand => 1);
 	my %data = $self->{data}->();
 	given ($name) {
 		when ('Associations') {
@@ -156,6 +142,32 @@ sub page {
 	    }
 	});
 	$self->refill($name);
+	my ($en,$be);
+	$en = $frm->Entry( 
+		-width => 25,
+		-textvariable => \$self->{key}
+	)->grid(-row => 1, -column => 0, -padx => 5);
+	given ($name) {
+		when ('Associations') {
+			$be = $frm->BrowseEntry(
+				-width => 25,
+				-listcmd => sub {
+					$be->delete(0,'end');
+					my %data = $self->{data}->();
+					_visit_sorted_tree $data{'alias'}, sub {
+						$be->insert('end', $_[0]) unless has_dollar $_[0];
+					};
+				},
+				-variable => \$self->{value}
+			)->grid(-row => 1, -column => 1, -padx => 5);
+		}
+		default {
+			$en = $frm->Entry( 
+				-width => 25,
+				-textvariable => \$self->{value}
+			)->grid(-row => 1, -column => 1, -padx => 5);
+		}
+	}
 	$self->{book}->raise($name);
 }
 sub refill {

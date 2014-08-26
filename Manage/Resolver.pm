@@ -52,12 +52,11 @@ use Manage::Utils qw(
 	@_separator
 	_realpath
 );
-use Manage::Settings;
 use Exporter::Easy (
 	OK => [ qw(
-		@given
-		set_given
-		given_title
+		@inputs
+		set_inputs
+		inputs_title
 		%dollars
 		has_dollar
 		is_dollar
@@ -68,8 +67,8 @@ use Exporter::Easy (
 		detect_dollar
 		get_dollars
 		set_dollars
-		place_given
-		given_meet_dollars
+		place_inputs
+		inputs_meet_dollars
 		resolve_dollar
 		clipdir
 		next_clip
@@ -77,16 +76,16 @@ use Exporter::Easy (
 		devels
 	)],
 );
-sub set_given {
-	@given = _getenv('given', sub{ () })
+sub set_inputs {
+	@inputs = _getenv('inputs', sub{ () })
 }
-our @given = set_given;
-sub given_title {
+our @inputs = set_inputs;
+sub inputs_title {
 	my $title = shift;
 	$title = _getenv('title', $title);
 	$title .=  $_separator[0];
-	if (@given) {
-		$title .= "on " . ($#given > 0 ? scalar(@given) . " given items" : "'$given[0]'");
+	if (@inputs) {
+		$title .= "on " . ($#inputs > 0 ? scalar(@inputs) . " given items" : "'$inputs[0]'");
 	}
 	$title
 }
@@ -169,22 +168,22 @@ sub make_value {
 sub detect_dollar {
 	_interpolate_rex shift,$dollar,shift,@_
 }
-sub is_given {
+sub is_input {
 	my $amount = shift;
-	my @gin = @_ < 1 ? @given : @_;
+	my @gin = @_ < 1 ? @inputs : @_;
 	my $a = _is_array_ref($amount) ? $amount->[0] : $amount;
 	looks_like_number($a) && $a >= 0 && $a < @gin + 1 ?
 		$a : -1
 }
 sub get_dollars {
 	my $input = shift;
-	my @gin = @_ < 1 ? @given : @_;
+	my @gin = @_ < 1 ? @inputs : @_;
 	%dollars = ();
 	detect_dollar ($input, sub {
 		my $key = $_[0];
 		$dollars{$key} = { amount => dollar_amount(@_), value => $key };
 		my $amount = $dollars{$key}->{amount};
-		my $x = is_given($amount, @gin);
+		my $x = is_input($amount, @gin);
 		given ($x) {
 			when (0) {
 				$x = _combine map { make_value $amount, $_ } @gin;
@@ -207,14 +206,14 @@ sub set_dollars {
 		make_value $dollars{$key}->{amount}, $dollars{$key}->{value}
 	});
 }
-sub place_given {
+sub place_inputs {
 	my $input = shift;
-	my @gin = @_ < 1 ? @given : @_;
+	my @gin = @_ < 1 ? @inputs : @_;
 	get_dollars $input, @gin;
 	set_dollars $input
 }
-sub given_meet_dollars {
-	@given == keys %dollars
+sub inputs_meet_dollars {
+	@inputs == keys %dollars
 }
 my ($obj, $window, $width);
 sub inject {
@@ -315,8 +314,8 @@ sub resolve_dollar {
 			-value => 'd',
 			-variable => \$choice)->grid(-row => $row, -column => $col++);
 		($row,$col) = (1,0);
-		my $btn = _install_menu_button $frm, 'Given', sub{}, 
-			sub{_replace_text($en, $_[0], 1)}, @given;
+		my $btn = _install_menu_button $frm, 'Inputs', sub{}, 
+			sub{_replace_text($en, $_[0], 1)}, @inputs;
 		$btn->grid(-row => $row, -column => $col++);
 		my $contents = 0;
 		my $clip_command = sub {
@@ -330,7 +329,8 @@ sub resolve_dollar {
 		$frm->Checkbutton(
 			-text => 'contents',
 			-onvalue => 1, -offvalue => 0, 
-			-variable => \$contents)->grid(-row => $row, -column => $col++);
+			-variable => \$contents
+		)->grid(-row => $row, -column => $col++);
 =pod
 		$frm->Button( 
 			-text => 'Add clip', 

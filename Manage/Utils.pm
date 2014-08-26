@@ -103,6 +103,7 @@ use Exporter::Easy (
 		_question
 		_message
 		_text_info
+		_text_edit
 		_text_dialog
 		_file_types
 		_ask_file
@@ -116,6 +117,7 @@ use Exporter::Easy (
 		_win32
 		_transit
 		_dimension
+		_childWidgetByName
 		$_entries $_history
 	)],
 );
@@ -773,18 +775,26 @@ sub _text_menu_extension {
 	}
 	$text_widget
 }
-sub _text_info {
+sub _text_window {
+	my $mode = shift;
 	my $main_loop = 0;
 	my $top = _value_or_else sub { $main_loop = 1; _tkinit(1) }, shift;
 	$top->title(_value_or_else('', shift));
 	my $text = shift;
 	my %menu_items = @_;
 	require Tk::ROText;
-	my $widget = $top->Scrolled("ROText", -scrollbars => 'oe');
+	my $widget = $top->Scrolled($mode ? "Text" : "ROText", -scrollbars => 'oe');
 	$widget->pack(-side => 'left', -fill => 'both', -expand => 1);
 	$widget->insert('end', $text);
-	_text_menu_extension($widget, %menu_items);
+	my $text_widget = _text_menu_extension($widget, %menu_items);
 	_center_window $top, $main_loop;
+	$text_widget->Contents
+}
+sub _text_info {
+	_text_window 0, @_
+}
+sub _text_edit {
+	_text_window 1, @_
 }
 sub _text_dialog {
 	my $win = _value_or_else sub{_tkinit(1)}, shift;
@@ -1005,6 +1015,13 @@ sub _install_menu_button {
 	);
 	_refresh_menu_button_items $win, $title, $btn, $command, @items;
 	$btn
+}
+sub _childWidgetByName {
+	my ($widget, $name) = @_;
+	foreach my $kid ($widget->children) {
+		return $kid if $name eq $kid->name;
+	}
+	undef
 }
 sub _transit {
 	my $obj = shift;

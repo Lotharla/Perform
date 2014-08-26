@@ -33,9 +33,9 @@ use Manage::PersistHash;
 use Manage::Resolver qw(
 	is_dollar has_dollar dollar_amount make_dollar 
 	make_value
-	place_given
+	place_inputs
 	resolve_dollar
-	@given
+	@inputs
 );
 use Exporter::Easy (
 	OK => [ qw(
@@ -177,7 +177,7 @@ sub cascades {
 					when ('*') {
 						for (split(/$path_rex/, $val)) {
 							my $p = join($_separator[2],$name,$_);
-							my $v = place_given($value, $_);
+							my $v = place_inputs($value, $_);
 							$menu->command(
 								-label   => $_,
 								-command => [ $func, $p, $v ]
@@ -299,9 +299,9 @@ given (_getenv_once('test', 0)) {
 	}
 	when (_lt -1) {
 		Manage::Resolver::inject({window => _tkinit(1)});
-		push @given, "/tmp/clip", "*", ".*";
+		push @inputs, "/tmp/clip", "*", ".*";
 		my $input = "find \${1:dir} -name \"\${2:file}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
-#		say place_given($input);
+#		say place_inputs($input);
 		say resolve_dollar($input, [["No files", '']]);
 	}
 	when (_lt 0) {

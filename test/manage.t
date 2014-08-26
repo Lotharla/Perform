@@ -67,9 +67,9 @@ use Manage::Resolver qw(
 	make_dollar 
 	make_value
 	get_dollars set_dollars detect_dollar 
-	@given 
-	given_title
-	place_given
+	@inputs 
+	inputs_title
+	place_inputs
 	devels
 );
 use Manage::Alias qw(
@@ -171,14 +171,14 @@ undef $acca;
 is_deeply _value_or_else(undef, $acca), $acca;
 @acca = _value_or_else(sub{()}, $acca);
 is @acca, 0;
-@given = qw/I didn't do it/;
-is place_given("\$1"), "I";
-is place_given("\$0") =~ s/\t/ /gr, $didnt;
+@inputs = qw/I didn't do it/;
+is place_inputs("\$1"), "I";
+is place_inputs("\$0") =~ s/\t/ /gr, $didnt;
 my $pattern = "find \$4 -name \"\${FILES}\" -print | xargs grep \"\$2\" 2>/dev/null";
-is place_given($pattern), 
+is place_inputs($pattern), 
 	"find it -name \"\" -print | xargs grep \"didn't\" 2>/dev/null";
-push @given, '';
-is place_given(_combine($pattern, "\$5")), 
+push @inputs, '';
+is place_inputs(_combine($pattern, "\$5")), 
 	"find it -name \"\" -print | xargs grep \"didn't\" 2>/dev/null\t";
 my $term = `gconftool-2 -g /desktop/gnome/applications/terminal/exec`;
 isnt $term, "gnome-terminal";
@@ -188,11 +188,11 @@ my $temp = {"\${DIR}"=>"xxx","\${FILES}"=>"yyy","\$123"=>"zzz"};
 is(detect_dollar($pattern, sub { $temp->{shift(@_)} }), 
 	"find xxx -name \"yyy\" -print | xargs grep \"zzz\" 2>/dev/null");
 my $dir = abs_path $0;
-@given = ();
-push @given, $dir, "**/*.*";
+@inputs = ();
+push @inputs, $dir, "**/*.*";
 $pattern = "find \${1:dir} -name \"\$2\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
 $dir = dirname $dir;
-is place_given($pattern), 
+is place_inputs($pattern), 
 	"find $dir -name \"**/*.*\" -print | xargs grep -e \"\" 2>/dev/null";
 ok -d dirname(dirname abs_path $0);
 $file = $_entries;
@@ -291,23 +291,23 @@ ok !_is_value("");
 ok _is_value(0);
 ok _is_value([]);
 ok !_is_value(());
-@given=();
-ok _is_value(\@given);
-_setenv 'given', "xxx";
-@given = _getenv 'given';
-ok _string_contains given_title('title'), "on 'xxx'", -1;
-_setenv 'given', "xxx\nzzz";
-@given = _getenv 'given';
-ok _string_contains given_title('title'), "on 2 given items", -1;
-_setenv 'given', undef;
-is _getenv('given', 'x'), 'x';
-_setenv 'given', '';
-is _getenv('given', 'x'), 'x';
-_setenv 'given', 0;
-is _getenv('given', 1), 0;		#	!!!
-delete $ENV{'given'};
-@given = _getenv('given', sub{()});
-is @given, 0;
+@inputs=();
+ok _is_value(\@inputs);
+_setenv 'inputs', "xxx";
+@inputs = _getenv 'inputs';
+ok _string_contains inputs_title('title'), "on 'xxx'", -1;
+_setenv 'inputs', "xxx\nzzz";
+@inputs = _getenv 'inputs';
+ok _string_contains inputs_title('title'), "on 2 given items", -1;
+_setenv 'inputs', undef;
+is _getenv('inputs', 'x'), 'x';
+_setenv 'inputs', '';
+is _getenv('inputs', 'x'), 'x';
+_setenv 'inputs', 0;
+is _getenv('inputs', 1), 0;		#	!!!
+delete $ENV{'inputs'};
+@inputs = _getenv('inputs', sub{()});
+is @inputs, 0;
 $dir = dirname(dirname abs_path $0);
 ok _dir_exists($dir);
 $_ = scalar(@_ = _extract_from(dirname(dirname abs_path $0) . "/Manage/Utils.pm", "sub\\s+(\\w+)"));
@@ -384,7 +384,7 @@ is_deeply $a, ["*","devels"];
 ok _string_contains make_value($a,'x'), $_separator[2];
 @_ = devels
 ok @_ > 1;
-is place_given("\$1", @_), $_[0];
+is place_inputs("\$1", @_), $_[0];
 _clipboard $didnt;
 is _get_clipboard, $didnt, 'clipboard';
 ok !has_dollar($_) && !is_dollar($_) && !dollar_amount($_) && !dollar_attr($_) for '$ANT_HOME';
