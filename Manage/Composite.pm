@@ -11,6 +11,7 @@ use Cwd qw(abs_path cwd);
 use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
+	looks_like_number
 	_value_or_else
 	_getenv
 	_now
@@ -55,6 +56,15 @@ sub mode {
 		$mode = 1;
 	}
 	$mode
+}
+sub modifier { 
+	return $_[0]->{modifier} unless @_ > 1;
+	my @modifiers = ('','Alt','Control');
+	return $modifiers[$_[2]] if defined $_[2];
+	my $mod = $_[1];
+	$_[0]->{modifier} = looks_like_number($mod) 
+		? $modifiers[$mod]
+		: $mod
 }
 sub dimension {
 	my ($self,$name,$width,$height) = @_;

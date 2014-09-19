@@ -32,8 +32,8 @@ use Exporter::Easy (
 		$_whitespace
 		_combine
 		_flatten
-		_escapeDoubleQuotes
 		_chomp
+		_prompt
 		_surround
 		_has_whitespace
 		_split_on_whitespace
@@ -69,8 +69,6 @@ use Exporter::Easy (
 		_fileparse
 		_filename_extension
 		_files_in_dir
-		_is_glob
-		_glob_match
 		_dir_exists
 		_file_exists
 		_realpath
@@ -86,12 +84,14 @@ use Exporter::Easy (
 		_call
 		_capture_output
 		_check_output
+		_terminalize
 		_perform
 		_perform_2
 		_result_perform
 		_binsearch_alpha
 		_binsearch_numeric
-		_object_from_XML
+		_is_xml_file
+		_xml_object
 		_set_selection
 		_replace_text
 		_center_window
@@ -108,6 +108,8 @@ use Exporter::Easy (
 		_file_types
 		_ask_file
 		_ask_directory
+		_balloon
+		_button
 		_menu
 		_create_popup_menu
 		_delete_popup_menu
@@ -117,7 +119,8 @@ use Exporter::Easy (
 		_win32
 		_transit
 		_dimension
-		_childWidgetByName
+		_widget_info
+		_find_widget
 		$_entries $_history
 	)],
 );
@@ -139,26 +142,26 @@ sub _flatten {
 	$string =~ s/$_/ /g foreach ("\t", "\n");
 	$string
 }
-sub _escapeDoubleQuotes {
-	my $string = shift;
-	$string =~ s/\"/\\"/g;
-	$string
-}
 sub _chomp {
 	my $var = shift;
 	chomp $var if $var;
 	return $var
 }
+sub _prompt {
+	print @_;
+	chomp(my $answer = <>);
+	return $answer;
+}
 sub _surround {
 	my $surrounder = shift;
-	my ($start,$end) = ('','');
+	my ($start,$end);
 	given ($surrounder) {
 		when (1) { ($start,$end) = ('\'','\''); }
 		when (2) { ($start,$end) = ('"','"'); }
 		when (3) { ($start,$end) = ('(',')'); }
 		when (4) { ($start,$end) = ('[',']'); }
 		when (5) { ($start,$end) = ('{','}'); }
-		default { ($start,$end) = _value_or_else(sub{($start,$end)}, $surrounder); }
+		default { ($start,$end) = _value_or_else(sub{('','')}, $surrounder); }
 	}
 	$start . $_[0] . $end
 }
@@ -444,17 +447,6 @@ sub _files_in_dir {
 		map { catfile $dir, $_ } @list :
 		@list;
 }
-sub _is_glob {
-	shift =~ m/\*|\?/
-}
-sub _glob_match {
-	my $glob = shift;
-	$glob =~ s/\./\\./g;
-	$glob =~ s/\*/.*/g;
-	$glob =~ s/\?/.?/g;
-	my $str = shift;
-	return $str =~ /$glob/;
-}
 sub _dir_exists {
 	my $dir = shift;
 	$dir && -d $dir
@@ -532,6 +524,7 @@ sub _contents_to_file {
 	open my $fh, ($append ? '>>' : '>') . ($encode ? ":$encode" : ''), $file || die "Can't open file : $!\n";
 	print $fh $_ foreach @_;
 	close $fh;
+	$file
 }
 sub _extract_from {
 	my $contents = shift;
@@ -593,30 +586,46 @@ sub _capture_output {
 	close $fhandle;
 	return _contents_of_file($fname);
 }
+sub _escapeDoubleQuotes {
+	my $string = shift;
+	$string =~ s/\"/\\"/g;
+	$string
+}
+sub _terminalize {
+	my $output = _flatten $_[0];
+	$output = _escapeDoubleQuotes $output;
+	$output = "bash -c '" . $output . " | less'";
+	my $terminal = _chomp(`gconftool-2 -g /desktop/gnome/applications/terminal/exec`);
+	return _combine( "$terminal", "-t", sprintf("\"%s\"", $output), "-e", "\"$output\"" );
+}
 sub _perform {
 	exec @_;
 }
 sub _perform_2 {
 	no warnings 'once';
-	my $command = _escapeDoubleQuotes "@_";
-	$command = "perl -e 'exec \"$command\"'";
+	my $command = _escapeDoubleQuotes "$_[0]";
+	$command =~ s/\$(\w+)/\$ENV{'$1'}/g;
+	$command = "env perl -e 'exec \"$command\"'";
+	my $precommand = $_[1];
+	$command = _combine($precommand, $command) if $precommand;
 	my $pid = open3(\*CHLD_IN, \*CHLD_OUT, \*CHLD_ERR, $command) or die "open3() failed $!";
 	while (<CHLD_OUT>) {
 	    print;
 	} 
+	while (<CHLD_ERR>) {
+	    print;
+	} 
 }
 sub _result_perform {
-	my $command = shift;
 	my $dir = "/tmp/out";
 	my $file = _temp_filename 'outXXXX', $dir;
-	_capture_output [\&_perform_2, $command], $file;
+	_capture_output [\&_perform_2, @_], $file;
 }
 sub _check_output {
 	my $func = shift;
-	my @rgx = @_;
 	my $output = _capture_output($func);
-	foreach my $rg (@rgx) { 
-		ok($output =~ $rg, $output)
+	foreach (@_) { 
+		ok($output =~ $_, $output)
 	}
 }
 sub _clipboard {
@@ -661,10 +670,14 @@ sub _binsearch_numeric {
 	my $desc = $_[2];
 	return _binsearch {$desc ? $b <=> $a : $a <=> $b} $_[0], @{$_[1]};
 }
-sub _object_from_XML {
-	my $fname = shift;
-	system("xmllint --noout \"$fname\"") and die $!;
-	my $xml = _contents_of_file($fname);
+sub _is_xml_file {
+	my $file = shift;
+	! system("xmllint --noout \"$file\" 2>/dev/null");
+}
+sub _xml_object {
+	my $file = shift;
+	die $! unless _is_xml_file $file;
+	my $xml = _contents_of_file($file);
 	local $SIG{__WARN__} = sub { };
 	my $XML2JSON = XML::XML2JSON->new();
 	return $XML2JSON->xml2obj($xml);
@@ -700,9 +713,14 @@ sub _replace_text {
 }
 sub _center_window {
 	my $win = shift;
+	my $mainloop = shift;
+	my $callback = shift;
 	$win->withdraw; # avoid the jumping window bug 
 	$win->Popup;
-	MainLoop if shift;
+	$win->OnDestroy($callback) if _is_code_ref $callback;
+	if ($mainloop) {
+		MainLoop;
+	}
 }
 sub __center_window {
 	my $win = shift;
@@ -787,8 +805,11 @@ sub _text_window {
 	$widget->pack(-side => 'left', -fill => 'both', -expand => 1);
 	$widget->insert('end', $text);
 	my $text_widget = _text_menu_extension($widget, %menu_items);
-	_center_window $top, $main_loop;
-	$text_widget->Contents
+	_center_window $top, $main_loop,
+		sub { 
+			$text = $text_widget->Contents unless $main_loop
+		};
+	$text
 }
 sub _text_info {
 	_text_window 0, @_
@@ -926,6 +947,34 @@ sub _ask_directory {
 	_implicit $title, $dir, 'Directory', $dir if $dir;
 	$dir
 }
+sub _balloon {
+	my ($win,$wgt) = @_;
+	use Tk::Balloon;
+	$win->Balloon(
+		-background => _value_or_else('white',3,\@_)
+	)->attach($wgt,
+		-initwait => 0,
+		-balloonmsg => _value_or_else('',2,\@_)
+	)
+}
+sub _button {
+	my $text = _value_or_else('',1,\@_);
+	my $tooltip = _is_array_ref $text;
+	if ($tooltip) {
+		$tooltip = _value_or_else('',1,$text);
+		$text = _value_or_else('',0,$text);
+	}
+	my $btn = $_[0]->Button(
+		-text => $text, 
+		-command => _value_or_else(sub{},2,\@_)
+	)->grid(
+		-row => _value_or_else(0,3,\@_), 
+		-column => _value_or_else(0,4,\@_), 
+		-padx => _value_or_else(10,5,\@_), 
+		-pady => _value_or_else(5,6,\@_));
+	_balloon $_[0], $btn, $tooltip if $tooltip;
+	$btn
+}
 sub _menu {
 	my $win = shift;
 	$win->configure(-menu => my $menu = $win->Menu);
@@ -994,9 +1043,7 @@ sub _refresh_menu_button_items {
 			)
 		}
 	} else {
-		use Tk::Balloon;
-		my $ba = $win->Balloon(-background=>'yellow');
-		$ba->attach($btn,-initwait => 0,-balloonmsg => sprintf "no %s items", $title);
+		_balloon $win, $btn, sprintf("no '%s' items", $title), 'yellow';
 	}
 }
 sub _install_menu_button {
@@ -1016,10 +1063,43 @@ sub _install_menu_button {
 	_refresh_menu_button_items $win, $title, $btn, $command, @items;
 	$btn
 }
-sub _childWidgetByName {
-	my ($widget, $name) = @_;
-	foreach my $kid ($widget->children) {
-		return $kid if $name eq $kid->name;
+sub _widget_info {
+	my ($widget, $info) = @_;
+	return '' unless $widget;
+	given ($info) {
+		when ('basic') {
+			return join '|', $widget->PathName
+		}
+		when ('layout') {
+			return join '|', _widget_info($widget, 'basic'), $widget->class, $widget->geometry
+		}
+		when ('bind') {
+			return join '|', _widget_info($widget, 'basic'), $widget->bindDump
+		}
+		default {
+			$info = {} if ! defined $info;
+			my $key = _widget_info($widget, 'basic');
+			$info->{$key} = {};
+			foreach my $kid ($widget->children) {
+				_widget_info($kid, $info->{$key})
+			}
+		}
+	}
+	$info
+}
+sub _find_widget {
+	my ($widget, $path) = @_;
+	if (_string_contains($path,'.',0)) {
+		return $widget if $path eq $widget->PathName;
+		foreach my $kid ($widget->children) {
+			my $p = substr($kid->PathName . '.', 0, length($path));
+			return _find_widget($kid, $path) 
+				if _string_contains($path, $p, 0);
+		}
+	} else {
+		foreach my $kid ($widget->children) {
+			return $kid if $path eq $kid->name;
+		}
 	}
 	undef
 }

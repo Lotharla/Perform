@@ -8,13 +8,13 @@ use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(abs_path $0);
 use Manage::Utils qw(
-	dump 
+	dump pp
 	_chomp
 	_combine
 	_flatten
-	_escapeDoubleQuotes
 	_getenv 
 	_value_or_else 
+	_terminalize
 	_perform
 	_perform_2
 	_capture_output
@@ -26,6 +26,8 @@ use Manage::Utils qw(
 	_text_info
 	_ask_file
 	$_entries $_history
+	_widget_info
+	_find_widget
 );
 use Manage::Resolver qw(
 	@inputs
@@ -45,6 +47,9 @@ my $command = _capture_output(
 			history_db => $_history,
 			extendMenu => sub {
 				my ($self, $menu) = @_;
+#dump _widget_info $self->{window};
+#dump _widget_info _find_widget($self->{window}, '.frame1.button'), 'layout';
+				return;
 				my $submenu = $menu->cascade(-label=>'Run', -underline=>0, -tearoff => 'no')->cget('-menu');
 				my @runopts = @{Settings->strings('run')};
 				for my $opt (0..$#runopts) {
@@ -68,16 +73,9 @@ my $command = _capture_output(
 exit unless $command;
 use Manage::Settings;
 Settings->apply('Environment');
-sub terminalize {
-	my $output = _flatten $_[0];
-	$output = _escapeDoubleQuotes $output;
-	$output = "bash -c '" . $output . " | less'";
-	my $terminal = _chomp(`gconftool-2 -g /desktop/gnome/applications/terminal/exec`);
-	return _combine( "$terminal", "-t", sprintf("\"%s\"", $output), "-e", "\"$output\"" );
-}
 given ($composer->modifier) {
 	when ('Alt') {
-		_perform terminalize $command
+		_perform _terminalize $command
 	}
 	when ('Control') {
 		my $text = _result_perform $command;

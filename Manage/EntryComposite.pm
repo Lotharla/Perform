@@ -10,7 +10,6 @@ use Cwd qw(abs_path cwd);
 use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
-	looks_like_number
 	_gt _lt _eq _ne
 	_value_or_else
 	_index_of
@@ -25,6 +24,7 @@ use Manage::Utils qw(
 	_question
 	_create_popup_menu
 	_install_menu
+	_button
 	$_entries $_history
 );
 use Manage::PersistHash;
@@ -137,25 +137,12 @@ sub bottom {
 	my $self = shift;
 	my $bottom = $self->{window}->Frame->pack(-side => 'bottom');
 	my %buttons = (
-		ok => $bottom->
-			Button(-text => 'OK', -command => sub { $self->commit })->
-				grid(-row => 0, -column => 0, -padx => 10, -pady => 5),
-		cancel => $bottom->
-			Button(-text => 'Cancel', -command => sub { $self->cancel })->
-				grid(-row => 0, -column => 1, -padx => 10, -pady => 5),
+		ok => _button($bottom, 'OK', sub { $self->commit }, 0, 0),
+		cancel => _button($bottom, 'Cancel', sub { $self->cancel }, 0, 1),
 	);
 	$self->modifier(0);
 	$self->{window}->bind('<Alt-Return>', sub { $self->modifier(1); $buttons{'ok'}->invoke });
 	$self->{window}->bind('<Control-Return>', sub { $self->modifier(2); $buttons{'ok'}->invoke });
-}
-sub modifier { 
-	return $_[0]->{modifier} unless @_ > 1;
-	my @modifiers = (' ','Alt','Control');
-	return $modifiers[$_[2]] if defined $_[2];
-	my $modifier = looks_like_number($_[1]) 
-		? $modifiers[$_[1]]
-		: $_[1];
-	$_[0]->{modifier} = $modifier;
 }
 sub history_menu {
 	my $self = shift;

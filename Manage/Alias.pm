@@ -30,6 +30,7 @@ use Manage::Utils qw(
 	_dimension
 );
 use Manage::PersistHash;
+use Manage::Settings;
 use Manage::Resolver qw(
 	is_dollar has_dollar dollar_amount make_dollar 
 	make_value
@@ -114,13 +115,14 @@ sub visit_alias_tree {
 }
 sub ask_alias {
 	my ($path, $value, $three_buttons)= @_;
-	my @buttons = $three_buttons
-		? ('Add/Update','Remove','Close')
-		: ('OK','Add/Update','Remove','Cancel');
+	my $modopts = Settings->strings('mod');
+	my @modopts = $three_buttons
+		? @{$modopts}
+		: ('OK',$modopts->[0],$modopts->[1],'Cancel');
 	my $dlg = $window->DialogBox(
 		-title => "Alias",
-		-buttons => \@buttons,
-		-default_button => $buttons[@buttons > 3 ? 0 : -1]);
+		-buttons => \@modopts,
+		-default_button => $modopts[$three_buttons ? -1 : 0]);
 	$dlg->Label( -text => 'Path' )->grid(-row => 0, -column => 0);
 	my ($be,$en);
 	$be = $dlg->BrowseEntry(
@@ -144,14 +146,14 @@ sub ask_alias {
 	)->grid(-row => 1, -column => 1);
 	_set_selection($en);
 	given($dlg->Show) {
-		when ($buttons[$three_buttons ? -1 : 0]) {
+		when ($modopts[$three_buttons ? -1 : 0]) {
 			return ($path, $value)
 		}
-		when ($buttons[$three_buttons? 0 : 1]) {
+		when ($modopts[$three_buttons? 0 : 1]) {
 			update_alias $path, $value;
 			ask_alias($path, $value)
 		}
-		when ($buttons[$three_buttons ? 1 : 2]) {
+		when ($modopts[$three_buttons ? 1 : 2]) {
 			update_alias $path;
 			ask_alias($path, $value)
 		}
@@ -261,7 +263,7 @@ sub install_alias_popup_button {
 	);
 	$btn
 }
-given (_getenv_once('test', 0)) {
+given (_getenv_once('__test', 0)) {
 	when (_gt 2) {
 		tie %data, "PersistHash", $_entries;
 		$window = _tkinit(0);
@@ -296,17 +298,6 @@ given (_getenv_once('test', 0)) {
 		};
 		_center_window $window, 1;
 		dump \%data;
-	}
-	when (_lt -1) {
-		Manage::Resolver::inject({window => _tkinit(1)});
-		push @inputs, "/tmp/clip", "*", ".*";
-		my $input = "find \${1:dir} -name \"\${2:file}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
-#		say place_inputs($input);
-		say resolve_dollar($input, [["No files", '']]);
-	}
-	when (_lt 0) {
-		Manage::Resolver::inject({window => _tkinit(1)});
-		say resolve_dollar("\${PATTERN}", [["No files", '']]);
 	}
 	default {
 		1

@@ -47,7 +47,8 @@ use Manage::Utils qw(
 	_message 
 	_now
 	_extract_from
-	_object_from_XML
+	_xml_object
+	_is_xml_file
 	_string_contains
 	_rndstr
 	_index_of
@@ -161,9 +162,14 @@ is_deeply $acca->{"cossa"}, \%cossa, "cossa";
 my $aref = \%assoc;
 is 'Settings'->find_assoc($aref, '.xxx'), '';
 'Settings'->modify_setting($aref, '.xxx', 'XXX');
-isnt 'Settings'->find_assoc($aref, '.xxx'), '';
+is 'Settings'->find_assoc($aref, '.xxx'), 'XXX';
 'Settings'->modify_setting($aref, '.xxx');
 is 'Settings'->find_assoc($aref, '.xxx'), '';
+is 'Settings'->find_assoc($aref, 'pom.xml'), 'firefox';
+'Settings'->modify_setting($aref, 'pom.xml', 'mvn');
+is 'Settings'->find_assoc($aref, 'pom.xml'), 'mvn';
+'Settings'->modify_setting($aref, 'pom.xml');
+is 'Settings'->find_assoc($aref, 'pom.xml'), 'firefox';
 my @acca = (1,2);
 @_ = _value_or_else(undef, \@acca);
 is_deeply \@_, \@acca;
@@ -201,6 +207,9 @@ ok -f $file;
 	tie my %data, "PersistHash", $file;
 	my @keys = sort keys(%data);
 	is_deeply \@keys, ["__file__","alias","assoc",'environ','favor',"options"];
+	Settings->apply('Environment', %data);
+	$words = Settings->to_string('Environment');
+	ok $words, $words;
 	PersistHash::store(\%data, $file);
 	$temp = PersistHash::fetch({}, $file);
 	is_deeply $temp, \%data;
@@ -315,9 +324,32 @@ is $_ / $_, 1;
 $file = dirname($dir) . "/bin/devel.sh";
 ok _file_exists($file);
 ok _extract_from($file, "\\v(\\w+)\\)\\v", " ");
+$file = catfile tmpdir, "test";
+{
+	use autodie;
+	open my $fh, ">", "$file";
+	my ($img,$type,$expansion,$keyword,$color,$linkcolor,$kickercolor,$cost,$strength,$health) = 
+		(";-)","unregimented","contracted","lock","green","red","blue",'$0.00',"humungous","excellent");
+	print $fh <<"END";
+<card>
+    <img>$img</img>
+    <type>$type</type>
+    <expansion>$expansion</expansion>
+    <keyword>$keyword</keyword>
+    <color>$color</color>
+    <linkcolor>$linkcolor</linkcolor>
+    <kickercolor>$kickercolor</kickercolor>
+    <cost>$cost</cost>
+    <strength>$strength</strength>
+    <health>$health</health>
+</card>
+END
+	close $fh;
+}
+ok _is_xml_file $file;
 $file = "/home/lotharla/work/Niklas/androidStuff/BerichtsheftApp/build.xml";
 ok _file_exists($file);
-my $obj = _object_from_XML($file);
+my $obj = _xml_object($file);
 isnt $obj->{project}, undef;
 #dump $obj;
 $file = $obj->{project}->{import}->{"\@file"};

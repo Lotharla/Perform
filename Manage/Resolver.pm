@@ -21,6 +21,7 @@ use Manage::Utils qw(
 	_gt _lt
 	_combine
 	_getenv 
+	_getenv_once
 	_setenv
 	_is_array_ref
 	_is_value
@@ -359,4 +360,19 @@ sub resolve_dollar {
 	}
 	return $output;
 }
-1;
+given (_getenv_once('test', 0)) {
+	when (_gt 1) {
+		Manage::Resolver::inject({window => _tkinit(1)});
+		push @inputs, "/tmp/clip", "*", ".*";
+		my $input = "find \${1:dir} -name \"\${2:file}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
+#		say place_inputs($input);
+		say resolve_dollar($input, [["No files", '']]);
+	}
+	when (_gt 0) {
+		Manage::Resolver::inject({window => _tkinit(1)});
+		say resolve_dollar("\${PATTERN}", [["No files", '']]);
+	}
+	default {
+		1
+	}
+}

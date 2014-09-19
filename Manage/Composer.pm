@@ -20,6 +20,7 @@ use Manage::Utils qw(
 	_install_menu
 	@_separator
 	_clipboard
+	_button
 );
 use Manage::Resolver qw(
 	has_dollar
@@ -56,6 +57,14 @@ sub data {
 		$_[0]->{'environ'} = _value_or_else({}, 'environ', $_[0]);
 		$_[0]->{'favor'} = _value_or_else({}, 'favor', $_[0]);
 	});
+}
+sub bottom {
+	my $self = shift;
+	my $bottom = $self->{window}->Frame->pack(-side => 'bottom');
+	my @runopts = @{Settings->strings('run')};
+	my $i = 0;
+	_button($bottom, $_, [sub { $self->mod_commit($_[0]) }, $i], 0, ++$i) foreach @runopts;
+	_button($bottom, 'Cancel', sub { $self->cancel }, 0, ++$i);
 }
 sub initialize {
     my( $self ) = @_;
@@ -217,5 +226,10 @@ sub commit {
 		return
 	}
 	$self->SUPER::commit();
+}
+sub mod_commit {
+	my $self = shift;
+	$self->modifier(shift);
+	$self->commit
 }
 1;

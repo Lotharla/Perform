@@ -17,8 +17,6 @@ use Manage::Utils qw(
 	catdir
 	_gt _lt
 	_is_hash_ref
-	_is_glob
-	_glob_match
 	_value_or_else 
 	_getenv_once
 	_setenv
@@ -31,6 +29,7 @@ use Manage::Utils qw(
 	_ask_file
 	_question
 	_rndstr
+	_button
 	_set_selection
 	_create_popup_menu
 	_delete_popup_menu
@@ -38,7 +37,7 @@ use Manage::Utils qw(
 	_flip_hash
 	_text_info
 	_visit_sorted_tree
-	_childWidgetByName
+	_find_widget
 );
 use Manage::Resolver qw(
 	clipdir
@@ -73,23 +72,18 @@ sub initialize {
 sub bottom {
 	my $self = shift;
 	my $bottom = $self->{window}->Frame->grid(-row => 2, -column => 0, -columnspan => 2);
-	my %buttons = (
-		add => $bottom->
-			Button(-text => 'Add/Update', -command => sub {
-				my $name = $self->{name};
-				$self->modify($name, $self->{key}, $self->{value});
-				$self->refill($name);
-			})->grid(-row => 0, -column => 0, -padx => 10, -pady => 5),
-		remove => $bottom->
-			Button(-text => 'Remove', -command => sub {
-				my $name = $self->{name};
-				$self->modify($name, $self->{key});
-				$self->refill($name);
-			})->grid(-row => 0, -column => 1, -padx => 10, -pady => 5),
-		close => $bottom->
-			Button(-text => 'Close', -command => sub { $self->cancel })->
-				grid(-row => 0, -column => 2, -padx => 10, -pady => 5),
-	);
+	my @modopts = @{strings('Settings', 'mod')};
+	_button($bottom, $modopts[0], sub {
+		my $name = $self->{name};
+		$self->modify($name, $self->{key}, $self->{value});
+		$self->refill($name);
+	}, 0, 0);
+	_button($bottom, $modopts[1], sub {
+		my $name = $self->{name};
+		$self->modify($name, $self->{key});
+		$self->refill($name);
+	}, 0, 1);
+	_button($bottom, $modopts[2], sub { $self->cancel }, 0, 2);
 }
 sub populate {
 	my $self = shift;
@@ -112,7 +106,7 @@ sub page {
 			}
 			$self->{name} = $self->{book}->raised;
 			($self->{key}, $self->{value}) = @{$self->{names}->{$self->{name}}}[1,2];
-			_set_selection(_childWidgetByName($frm, 'entry'));
+			_set_selection(_find_widget($frm, 'entry'));
 		} 
 	);
 	$frm = $page->Frame->pack(-side => 'bottom', -fill => 'x', -expand => 1);
@@ -204,9 +198,20 @@ sub find_assoc {
 	my $glob = shift;
 	my @parts = _fileparse($glob);
 	$parts[1] = $parts[0] . $parts[2];
-	foreach (keys %$href) {
-		if (_is_glob($_)) {
-			return $href->{$_} if _glob_match $_, $parts[1];
+	sub _is_glob {
+		shift =~ m/\*|\?/
+	}
+	sub _glob_match {
+		my $glob = shift;
+		$glob =~ s/\./\\./g;
+		$glob =~ s/\*/.*/g;
+		$glob =~ s/\?/.?/g;
+		my $str = shift;
+		return $str =~ /$glob/;
+	}
+	foreach my $key (keys %$href) {
+		if (_is_glob($key)) {
+			return $href->{$key} if _glob_match $key, $parts[1];
 		}
 	}
 	_value_or_else( _value_or_else('', $parts[2], $href), $parts[1], $href);
@@ -235,12 +240,30 @@ sub apply {
 			}
 			\%environ_settings
 		}
+		default {
+			{}
+		}
+	}
+}
+sub to_string {
+	my $class = shift;
+	my $name = shift;
+	my $sep = _value_or_else ' ', shift;
+	given ($name) {
+		when ('Environment') {
+			my @strings = map { sprintf("%s=%s", $_, $environ_settings{$_}) } keys( %environ_settings );
+			join $sep, @strings
+		}
+		default {
+			''
+		}
 	}
 }
 sub strings {
 	my $class = shift;
 	given (shift) {
-		when ('run') { return ["normal","in terminal","capture output"] }
+		when ('run') { return ["Run","Run in terminal","Run and capture output"] }
+		when ('mod') { return ['Add/Update','Remove','Close'] }
 	}
 	[]
 }

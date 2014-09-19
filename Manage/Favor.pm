@@ -100,11 +100,11 @@ sub organize_favor {
 	} else {
 		$runopt = runopts $runopt;
 	}
-	my $buttons = ['Add/Update', 'Remove', 'Close'];
+	my $modopts = Settings->strings('mod');
 	my $dlg = $window->DialogBox(
 		-title => 'Favorites',
-		-buttons => $buttons,
-		-default_button => $buttons->[2]);
+		-buttons => $modopts,
+		-default_button => $modopts->[2]);
 	my( $lst, $btn, $pic );
 	$lst = $dlg->Scrolled('TList',
 		-orient => 'vertical', 
@@ -163,14 +163,14 @@ sub organize_favor {
 	)->grid(-row => 3, -column => 0, -columnspan => 2);
 	_set_selection($en);
 	given($dlg->Show) {
-		when ($buttons->[0]) {
+		when ($modopts->[0]) {
 			$file = photo_file($pic);
 			$runopt = _index_of $runopt, runopts;
 			my @params = ($name, $favor, $file, $command, $runopt);
 			update_favorite(@params);
 			organize_favor(@params);
 		}
-		when ($buttons->[1]) {
+		when ($modopts->[1]) {
 			update_favorite($name);
 			organize_favor($name);
 		}
@@ -234,7 +234,7 @@ sub install_favor_button {
 	);
 	$btn
 }
-given (_getenv_once('test', 0)) {
+given (_getenv_once('_test', 0)) {
 	when (_gt 1) {
 		tie %data, "PersistHash", $_entries;
 		$window = _tkinit(0);
