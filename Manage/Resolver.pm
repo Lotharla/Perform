@@ -53,6 +53,7 @@ use Manage::Utils qw(
 	@_separator
 	_realpath
 );
+require Manage::Settings;
 use Exporter::Easy (
 	OK => [ qw(
 		@inputs
@@ -78,12 +79,11 @@ use Exporter::Easy (
 	)],
 );
 sub set_inputs {
-	@inputs = _getenv('inputs', sub{ () })
+	@inputs = @ARGV ? @ARGV : _getenv('inputs', sub{ () })
 }
 our @inputs = set_inputs;
 sub inputs_title {
-	my $title = shift;
-	$title = _getenv('title', $title);
+	my $title = _value_or_else '',shift;
 	$title .=  $_separator[0];
 	if (@inputs) {
 		$title .= "on " . ($#inputs > 0 ? scalar(@inputs) . " given items" : "'$inputs[0]'");
@@ -120,7 +120,9 @@ BEGIN {
 }
 my $dollar = qr/\$(\d+)|\$\{([\w\*]+)(\:(\w+))?\}/;
 sub has_dollar {
-	_value_or_else('', shift) =~ $dollar
+	my $expr = _value_or_else '', shift;
+	my $res = $expr =~ $dollar;
+	$res
 }
 sub is_dollar {
 	shift(@_) =~ m[^$dollar$]
@@ -275,7 +277,7 @@ sub resolve_dollar {
 		});
 		return $output;
 	}
-	my @types = _file_types(Settings->apply('Associations'));
+	my @types = _file_types(Settings::apply('Associations'));
 	%dollars = get_dollars $input;
 	my $dlg = $window->DialogBox(
 		-title => $input,
@@ -298,12 +300,12 @@ sub resolve_dollar {
 		$frm->Button( 
 			-text => 'Browse...', 
 			-command => sub { 
-				my $answer = $choice eq 'f' ?
-					_ask_file($window, 'Choose file', 
-						-f $dollars{$key}->{value} ? $dollars{$key}->{value} : '', \@types) :
-					_ask_directory($window, 'Choose directory', 
+				my $answer = $choice eq 'f'
+					? _ask_file($window, 'Choose file', 
+						[-f $dollars{$key}->{value} ? $dollars{$key}->{value} : ''], \@types)
+					: _ask_directory($window, 'Choose directory', 
 						-d $dollars{$key}->{value} ? $dollars{$key}->{value} : ''); 
-				_replace_text $en, $answer if $answer;
+				_replace_text $en, $choice eq 'f' ? "@$answer" : $answer if $answer;
 			} 
 		)->grid(-row => $row, -column => $col++);
 		$frm->Radiobutton(
@@ -366,11 +368,11 @@ given (_getenv_once('test', 0)) {
 		push @inputs, "/tmp/clip", "*", ".*";
 		my $input = "find \${1:dir} -name \"\${2:file}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
 #		say place_inputs($input);
-		say resolve_dollar($input, [["No files", '']]);
+		say resolve_dollar($input);
 	}
 	when (_gt 0) {
 		Manage::Resolver::inject({window => _tkinit(1)});
-		say resolve_dollar("\${PATTERN}", [["No files", '']]);
+		say resolve_dollar("\${PATTERN}");
 	}
 	default {
 		1

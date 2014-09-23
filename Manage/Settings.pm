@@ -38,12 +38,7 @@ use Manage::Utils qw(
 	_text_info
 	_visit_sorted_tree
 	_find_widget
-);
-use Manage::Resolver qw(
-	clipdir
-	next_clip
-	get_clip
-	has_dollar
+	_is_loaded
 );
 use Manage::Composite;
 our @ISA = qw(Composite);
@@ -93,6 +88,12 @@ sub populate {
 	foreach (@params) {
 		$self->page($_);
 	}
+}
+sub aliases {
+	my $self = shift;
+	_is_loaded("Manage::Alias") 
+		? Manage::Alias::aliases()
+		: ()
 }
 sub page {
 	my $self = shift;
@@ -147,10 +148,7 @@ sub page {
 				-width => 25,
 				-listcmd => sub {
 					$be->delete(0,'end');
-					my %data = $self->{data}->();
-					_visit_sorted_tree $data{'alias'}, sub {
-						$be->insert('end', $_[0]) unless has_dollar $_[0];
-					};
+					$be->insert('end', $_) foreach $self->aliases;
 				},
 				-variable => \$self->{value}
 			)->grid(-row => 1, -column => 1, -padx => 5);
@@ -262,7 +260,7 @@ sub to_string {
 sub strings {
 	my $class = shift;
 	given (shift) {
-		when ('run') { return ["Run","Run in terminal","Run and capture output"] }
+		when ('run') { return ["Run","Run in terminal","Run & capture output"] }
 		when ('mod') { return ['Add/Update','Remove','Close'] }
 	}
 	[]

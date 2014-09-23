@@ -10,6 +10,7 @@ use lib dirname(dirname abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
 	_chomp
+	_boolean
 	_is_value
 	_value_or_else 
 	_getenv
@@ -63,14 +64,20 @@ sub bottom {
 	my $bottom = $self->{window}->Frame->pack(-side => 'bottom');
 	my @runopts = @{Settings->strings('run')};
 	my $i = 0;
-	_button($bottom, $_, [sub { $self->mod_commit($_[0]) }, $i], 0, ++$i) foreach @runopts;
+	_button($bottom, 
+		[$_,join('-',$self->modifier('',$i),'Enter')], 
+		[sub { $self->mod_commit($_[0]) }, $i], 
+		0, ++$i) foreach @runopts;
 	_button($bottom, 'Cancel', sub { $self->cancel }, 0, ++$i);
+	$self->modifier(0);
+	$self->{window}->bind('<Alt-Return>', sub { $self->mod_commit(1) });
+	$self->{window}->bind('<Control-Return>', sub { $self->mod_commit(2) });
 }
 sub initialize {
     my( $self ) = @_;
     $self->SUPER::initialize();
 	my %data = $self->{data}->();
-	$self->{immediate} = $data{options}->{"immediate"} ? 1 : 0;
+	$self->{immediate} = _boolean $data{options}->{"immediate"};
     Settings->apply('Associations', %data);
     Settings->apply('Environment', %data);
     my $menu = _menu($self->{window});
@@ -142,10 +149,9 @@ sub initialize {
 		$self->show_settings;
 	});
 	if ($self->use_history) {
-		$self->history_menu($menu);
-	} else {
-		$self->options_menu($menu);
+		$menu = $self->history_menu($menu);
 	}
+	$menu = $self->options_menu($menu);
 	if ($self->{extendMenu}) {
 		$self->{extendMenu}($self, $menu);
 	}
@@ -159,20 +165,22 @@ sub show_settings {
 		params => ['Associations','Environment']
 	))->relaunch;
 }
-sub history_menu {
-	my $self = shift;
-	my $menu = shift;
-	$self->SUPER::history_menu($menu) if defined($menu);
-}
 sub options_menu {
 	my $self = shift;
-	my $menu = shift;
-	$self->SUPER::options_menu($menu) if defined($menu);
+	my $menu = $self->SUPER::options_menu(shift);
+	$menu->separator;
+	$menu->checkbutton(-label=>"immediately", -onvalue => 1, -offvalue => 0, 
+		-variable => \$self->{immediate}, 
+		-command => sub{
+			my %data = $self->{data}->();
+			$data{options}->{"immediate"} = $self->{immediate};
+		});
+	$menu
 }
 sub update_title {
 	my $self = shift;
 	my @parts = split /$_separator[0]/, $self->{window}->title;
-	$self->{window}->title(inputs_title $parts[0]);
+	$self->{window}->title(inputs_title _getenv('title', $parts[0]));
 }
 sub populate {
 	my $self = shift;

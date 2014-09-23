@@ -22,7 +22,7 @@ use Manage::Resolver qw(
 use Manage::PageComposite;
 my $params = @inputs ? \@inputs : \@ARGV;
 (new PageComposite(
-	title => inputs_title("View files ..."), 
+	title => inputs_title(_getenv('title', "View files ...")), 
 	width => _getenv('width'),
 	params => $params
 ))->relaunch;

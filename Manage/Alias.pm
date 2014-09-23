@@ -43,6 +43,7 @@ use Exporter::Easy (
 		resolve_alias
 		update_alias
 		visit_alias_tree
+		aliases
 		ask_alias
 		install_alias_button
 		install_alias_popup_button
@@ -112,6 +113,13 @@ sub update_alias {
 }
 sub visit_alias_tree {
 	_visit_sorted_tree $data{'alias'}, shift
+}
+sub aliases {
+	my @aliases;
+	_visit_sorted_tree $data{'alias'}, sub {
+		push @aliases, $_[0] unless has_dollar($_[0]);
+	};
+	@aliases
 }
 sub ask_alias {
 	my ($path, $value, $three_buttons)= @_;

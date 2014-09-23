@@ -9,6 +9,7 @@ use Cwd qw(abs_path);
 use lib dirname(abs_path $0);
 use Manage::Utils qw(
 	dump pp
+	catfile
 	_chomp
 	_combine
 	_flatten
@@ -26,8 +27,7 @@ use Manage::Utils qw(
 	_text_info
 	_ask_file
 	$_entries $_history
-	_widget_info
-	_find_widget
+	_top_widget
 );
 use Manage::Resolver qw(
 	@inputs
@@ -35,21 +35,24 @@ use Manage::Resolver qw(
 	next_clip
 );
 use Manage::Composer;
+sub perform {
+	my $cmd = catfile(dirname(__FILE__), "perform.pl");
+	$cmd = sprintf "env %s @_", $cmd;
+	`$cmd`
+}
 my $composer;
+my $title = _getenv('title', "Perform ...");
 my $command = _capture_output(
 	sub {
-		my $title = inputs_title("Perform ...");
 		my $label = _getenv('label', '');
 		$composer = new Composer( 
-			title => $title,
+			title => inputs_title($title),
 			label => $label,
 			file => $_entries,
 			history_db => $_history,
 			extendMenu => sub {
 				my ($self, $menu) = @_;
-#dump _widget_info $self->{window};
-#dump _widget_info _find_widget($self->{window}, '.frame1.button'), 'layout';
-				return;
+=pod
 				my $submenu = $menu->cascade(-label=>'Run', -underline=>0, -tearoff => 'no')->cget('-menu');
 				my @runopts = @{Settings->strings('run')};
 				for my $opt (0..$#runopts) {
@@ -59,12 +62,7 @@ my $command = _capture_output(
 						-variable => \$self->{modifier},
 						-command => sub{ $self->modifier($opt) });
 				}
-				$submenu->separator;
-				$submenu->checkbutton(-label=>"immediately", -onvalue => 1, -offvalue => 0, 
-					-variable => \$self->{immediate}, -command => sub{
-						my %data = $self->{data}->();
-						$data{options}->{"immediate"} = $self->{immediate};
-					});
+=cut
 			}
 		);
 		$composer->relaunch;
@@ -79,14 +77,20 @@ given ($composer->modifier) {
 	}
 	when ('Control') {
 		my $text = _result_perform $command;
-		_text_info undef, $command, $text, 'Save text' => sub {
-			my ($label,$widget,$parent) = @_;
-			my $file = next_clip;
-			$file = _ask_file($parent, $label, $file, [], 1);
-			if ($file) {
-				_contents_to_file $file, $text;
-			}
-		};
+		_text_info undef, $command, $text, 
+			'Save text' => sub {
+				my ($label,$widget,$parent) = @_;
+				my $file = next_clip;
+				$file = _ask_file($parent, $label, $file, [], 1);
+				if ($file) {
+					_contents_to_file $file, $text;
+				}
+			}, 
+			"$title" => sub {
+				my ($label,$widget) = @_;
+				_top_widget($widget)->destroy;
+				perform
+			};
 	}
 	default {
 		_perform $command

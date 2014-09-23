@@ -2,6 +2,7 @@
 use diagnostics; # this gives you more debugging information
 use warnings;    # this warns you of bad practices
 use strict;      # this prevents silly errors
+no warnings 'experimental';
 use feature qw(say switch);
 use Test::More qw( no_plan ); # for the is() and isnt() functions
 BEGIN { 
@@ -62,6 +63,10 @@ use Manage::Utils qw(
 	_gt _lt
 	_visit_sorted_tree
 	_realpath
+	_is_loaded
+	_connect
+	_make_sure_table
+	_tables
 );
 use Manage::Resolver qw(
 	is_dollar has_dollar dollar_amount dollar_attr
@@ -77,6 +82,7 @@ use Manage::Alias qw(
 	resolve_alias 
 	update_alias
 	visit_alias_tree
+	aliases
 );
 use Manage::Settings;
 my $file = catfile tmpdir, "test";
@@ -142,7 +148,8 @@ is_deeply \@parts, [["All files", '*'], ["No files", '']];
 is @parts, 7;
 @parts = _file_types \%assoc, ["make"];
 is @parts, 2;
-#_ask_file _tkinit(0), 'Test', "$ENV{HOME}/work/bin/devel.sh", \@parts;
+@parts = _file_types \%assoc, ["bash"];
+#say _ask_file _tkinit(0), 'Test', ["$ENV{HOME}/work/bin/devel.sh"], \@parts;
 @parts = sort(keys %assoc);
 is _value_or_else('', 4, \@parts), '.t';
 is _value_or_else('x', 10, \@parts), 'x';
@@ -251,10 +258,10 @@ is keys %alias, 4;
 update_alias("find|find-in-files", $pattern);
 is resolve_alias("find|find-in-files"), $pattern;
 is keys %alias, 5;
-@parts = ();
-visit_alias_tree sub {
-	push @parts, $_[0] unless has_dollar $_[0];
-};
+ok ! _is_loaded "Manage::Favor";
+ok _is_loaded "Manage::Alias";
+Manage::Alias::inject( alias => \%alias );
+@parts = aliases;
 is @parts, 5;
 use POSIX qw(tzset);
 my %history;
@@ -444,6 +451,34 @@ unlink $file;
 	$temp = PersistHash::fetch({}, $file);
 	is_deeply $temp->{hash}, $data{hash};
 }
+{
+	_make_sure_table($file,'try', "a", "TEXT");
+	my $dbh = _connect($file);
+	ok defined $dbh;
+	my $ins = $dbh->prepare('INSERT INTO try (a) VALUES (?)');
+	for my $val (qw(foo bar bat woo oop craw)) {
+	    $ins->execute($val);
+	}
+	my $sel = $dbh->prepare('SELECT a FROM try WHERE a REGEXP ?');
+	sub actual {
+	    print "'$_[0]' matches:\n  ";
+	    print join "\n  " =>
+	        @{ $dbh->selectcol_arrayref($sel, undef, $_[0]) };
+	    print "\n";
+	}
+	sub expected {
+		given ($_[0]) {
+			when ('^b') { "'^b' matches:\n  bar\n  bat\n" }
+			when ('a') { "'a' matches:\n  bar\n  bat\n  craw\n" }
+			when ('w?oop?') { "'w?oop?' matches:\n  foo\n  woo\n  oop\n" }
+		}
+	}
+	for (qw(^b a w?oop?)) {
+	    is _capture_output([\&actual, $_]), expected($_), $_;
+	}
+	$dbh->do('DROP TABLE try');
+	$dbh->disconnect;
+}
 =pod
 {
 	tie my %data, "PersistHash", $_history, 1;
@@ -452,6 +487,12 @@ unlink $file;
 	$data{$_} = $history{$_} foreach keys %history;
 }
 =cut
+_make_sure_table($_history,'texts', 
+	"signature" => "TEXT",
+	"date" => "INTEGER",
+	"text" => "TEXT",
+);
+ok _index_of('texts', _tables $_history) > -1;
 $p = dirname(__FILE__);
 ok !_string_contains($p, '~');
 $p =~ s/$home/~/;

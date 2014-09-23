@@ -11,6 +11,7 @@ use File::Temp;
 use Data::Dump qw(dump pp);
 use IPC::Open3;
 use XML::XML2JSON;
+use DBD::SQLite;
 use Test::More;
 use Tk;
 use Exporter::Easy (
@@ -44,6 +45,7 @@ use Exporter::Easy (
 		_is_hash_ref
 		_array
 		_hash
+		_boolean
 		_is_value
 		_value_or_else
 		_getenv
@@ -77,6 +79,10 @@ use Exporter::Easy (
 		_contents_to_file
 		_contents_of_file
 		_is_sqlite_file
+		_connect
+		_make_sure_table
+		_tables
+		_delete_record
 		_extract_from
 		_diagnostic
 		_temp_filename
@@ -92,6 +98,7 @@ use Exporter::Easy (
 		_binsearch_numeric
 		_is_xml_file
 		_xml_object
+		_is_loaded
 		_set_selection
 		_replace_text
 		_center_window
@@ -119,6 +126,7 @@ use Exporter::Easy (
 		_win32
 		_transit
 		_dimension
+		_top_widget
 		_widget_info
 		_find_widget
 		$_entries $_history
@@ -179,6 +187,7 @@ sub _is_array_ref { ref($_[0]) eq 'ARRAY' }
 sub _is_hash_ref { ref($_[0]) eq 'HASH' }
 sub _array { _is_array_ref($_[0]) ? @{$_[0]} : () }
 sub _hash { _is_hash_ref($_[0]) ? %{$_[0]} : () }
+sub _boolean { $_[0] ? 1 : 0 }
 sub _is_blessed { ref($_[0]) && UNIVERSAL::can($_[0],'can') }
 sub _is_type_of { _is_blessed($_[1]) && $_[1]->isa($_[0]) }
 sub _is_value { $_[0] || length($_[0]) }
@@ -281,13 +290,13 @@ sub _string_contains {
 	my ($haystack,$needle,$align) = @_;
 	given ($align) {
 		when (0) {
-			return $haystack =~ /^\Q$needle\E/ ? 1 : 0;
+			return _boolean $haystack =~ /^\Q$needle\E/;
 		}
 		when (-1) {
-			return $haystack =~ /\Q$needle\E$/ ? 1 : 0;
+			return _boolean $haystack =~ /\Q$needle\E$/;
 		}
 		default {
-			return $haystack =~ /\Q$needle\E/ ? 1 : 0;
+			return _boolean $haystack =~ /\Q$needle\E/;
 		}
 	}
 }
@@ -513,6 +522,51 @@ sub _is_sqlite_file {
 	my $header = _contents_of_file $file, 16;
 	_string_contains $header, 'SQLite format 3', 0
 }
+sub _connect {
+	my $dbfile = shift;
+	DBI->connect("DBI:SQLite:dbname=$dbfile", '', '',
+	    {
+	        RaiseError  => 1,
+	        PrintError  => 0,
+	    }
+	);
+}
+sub _make_sure_table {
+	my $dbfile = shift;
+	my $table = shift;
+	my @definition;
+	push @definition, shift . ' ' . shift while (@_ > 1);
+	my $definition = join ', ', @definition;
+	my $dbh = _connect $dbfile;
+	$dbh->do("CREATE TABLE IF NOT EXISTS $table ($definition)");
+	$dbh->disconnect;
+}
+sub _tables {
+	my @tables;
+	my $dbfile = shift;
+	if (_is_sqlite_file $dbfile) {
+		my $dbh = _connect($_history);
+		my $stmt = qq(select name,sql from sqlite_master where type = 'table');
+		my $sth = $dbh->prepare( $stmt );
+		$sth->execute() or die $DBI::errstr;
+		while (my @row = $sth->fetchrow_array()) {
+			push @tables, $row[0];
+		}
+		$dbh->disconnect;
+	}
+	@tables
+}
+sub _delete_record {
+	my $dbfile = shift;
+	my $table = shift;
+	my $where = shift;
+	if (_is_sqlite_file $dbfile) {
+		my $dbh = _connect $dbfile;
+		my $del = $dbh->prepare("DELETE FROM $table WHERE $where");
+		$del->execute or die $dbh->errstr;
+		$dbh->disconnect;
+	}
+}
 sub _contents_to_file {
 	my $file = shift;
 	my ($encode,$append);
@@ -681,6 +735,11 @@ sub _xml_object {
 	local $SIG{__WARN__} = sub { };
 	my $XML2JSON = XML::XML2JSON->new();
 	return $XML2JSON->xml2obj($xml);
+}
+sub _is_loaded {
+    (my $file = shift) =~ s/::/\//g;
+    $file .= '.pm';
+    grep { $_ eq $file } keys %INC
 }
 sub _set_selection {
 	my $en = _value_or_else(undef,0,\@_);
@@ -912,7 +971,10 @@ sub _ask_file {
 	my $top = _value_or_else sub{_tkinit(1)}, shift;
 	my $default = $save ? "Save" : "Open";
 	my $title = _value_or_else $default, shift;
-	my $file = _value_or_else sub{_implicit [$title,$default]}, shift;
+	my $file = shift;
+	my $multiple = _is_array_ref($file);
+	$file = $file->[0] if $multiple;
+	$file = _implicit [$title,$default] unless $file;
 	my @types = _array(shift);
 	@types = _file_types unless @types;
 	if (@types == 1 && _win32()) {
@@ -920,19 +982,18 @@ sub _ask_file {
 	}
 	my $dir = dirname(_value_or_else abs_path($0), $file);
 	$file = length($file) ? basename($file) : '';
-	if ($save) {
-		$file = $top->getSaveFile(
+	$file = $save
+		? $top->getSaveFile(
 			-title => $title,
 			-initialdir => $dir,
 			-initialfile => $file,
-			-filetypes => \@types);
-	} else {
-		$file = $top->getOpenFile(
+			-filetypes => \@types)
+		: $top->getOpenFile(
 			-title => $title,
 			-initialdir => $dir,
 			-initialfile => $file,
-			-filetypes => \@types);
-	}
+			-filetypes => \@types,
+			-multiple => $multiple);
 	_implicit $title, $file, $default, $file if $file;
 	$file
 }
@@ -1063,15 +1124,23 @@ sub _install_menu_button {
 	_refresh_menu_button_items $win, $title, $btn, $command, @items;
 	$btn
 }
+sub _top_widget {
+	my $widget = shift;
+	$widget = $widget->parent while $widget->parent;
+	$widget
+}
 sub _widget_info {
 	my ($widget, $info) = @_;
 	return '' unless $widget;
 	given ($info) {
+		when ('signature') {
+			return _top_widget($widget)->class . $widget->PathName
+		}
 		when ('basic') {
-			return join '|', $widget->PathName
+			return join '|', $widget->PathName, $widget->class
 		}
 		when ('layout') {
-			return join '|', _widget_info($widget, 'basic'), $widget->class, $widget->geometry
+			return join '|', _widget_info($widget, 'basic'), $widget->geometry
 		}
 		when ('bind') {
 			return join '|', _widget_info($widget, 'basic'), $widget->bindDump
@@ -1088,16 +1157,16 @@ sub _widget_info {
 	$info
 }
 sub _find_widget {
-	my ($widget, $path) = @_;
+	my ($ancestor, $path) = @_;
 	if (_string_contains($path,'.',0)) {
-		return $widget if $path eq $widget->PathName;
-		foreach my $kid ($widget->children) {
+		return $ancestor if $path eq $ancestor->PathName;
+		foreach my $kid ($ancestor->children) {
 			my $p = substr($kid->PathName . '.', 0, length($path));
 			return _find_widget($kid, $path) 
 				if _string_contains($path, $p, 0);
 		}
 	} else {
-		foreach my $kid ($widget->children) {
+		foreach my $kid ($ancestor->children) {
 			return $kid if $path eq $kid->name;
 		}
 	}

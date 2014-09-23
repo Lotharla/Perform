@@ -27,6 +27,9 @@ use Manage::Utils qw(
 	_clipboard
 	_tkinit
 	_text_dialog
+	_widget_info 
+	_find_widget
+	_center_window
 );
 use Manage::Alias qw(
 	resolve_alias 
@@ -38,8 +41,9 @@ use Manage::Resolver qw(
 	@inputs
 	set_inputs
 );
-use Manage::Composer;
 use Manage::Composite;
+use Manage::Composer;
+use Manage::SuggestBox;
 given (_value_or_else(0, _getenv('testing'))) {
 	when (_ne 0) {
 		my $composer = new Composer( 
@@ -134,6 +138,12 @@ here:
 	$composer->cancel;
 }
 {
+	my $win = _tkinit(0,'SuggestBox');
+	my $wgt = $win->SuggestBox()->pack;
+	_center_window($win, 1);
+}
+exit;
+{
 	_clipboard $ddd[0];
 	my $win = _tkinit(0);
 	_text_dialog $win, [20,3], 'Inputs', \@inputs;
@@ -141,7 +151,9 @@ here:
 	my $i;
 	$canvas->createText(100, 10+100*($i++), -text => $_) foreach (@inputs, _get_clipboard);
 	$canvas->pack;
-	MainLoop();
-}
+dump _widget_info $win;
+dump _widget_info _find_widget($win, '.frame.canvas'), 'layout';
 =pod
 =cut
+	$win->destroy
+}

@@ -69,13 +69,13 @@ sub initialize {
 	$self->{window}->bind('<KeyPress-Return>', sub {$self->commit});
 	$self->{window}->bind('<KeyPress-Up>', sub {$self->move_entry(-1)});
 	$self->{window}->bind('<KeyPress-Down>', sub {$self->move_entry(+1)});
+	my $menu;
 	if ($self->use_history) {
 		$self->{window}->bind('<Control-KeyPress-Down>', sub {$self->move_point_in_time(+1)});
 		$self->{window}->bind('<Control-KeyPress-Up>', sub {$self->move_point_in_time(-1)});
-		$self->history_menu;
-	} else {
-		$self->options_menu;
-	}
+		$menu = $self->history_menu($menu);
+	} 
+	$self->options_menu($menu);
 	$self->bottom;
 	$self->{entry}->configure(
 		-font => $self->{window}->fontCreate(-size => 12)
@@ -152,8 +152,9 @@ sub history_menu {
 		$popup ? $self->{window} : $menu, 
 		sub {
 			my $differs = $self->is_new_entry($self->item);
-			my $hasNoPoint = $self->{point} < 0;
-			my $hasNoHistory = $self->{point} < -1;
+			my $point = _value_or_else -2,$self->{point};
+			my $hasNoPoint = $point < 0;
+			my $hasNoHistory = $point < -1;
 			$menu->entryconfigure(0, -state => $hasNoHistory ? 'disabled' : 'normal');
 			$menu->entryconfigure(1, -state => $hasNoHistory ? 'disabled' : 'normal');
 			$menu->entryconfigure(3, -state => $differs ? 'normal' : 'disabled');
@@ -167,8 +168,7 @@ sub history_menu {
 		'remove from history', sub{ $self->change_history('remove') }, 
 		'update history', sub{ $self->change_history('update') },
 		$popup ? undef : 'History'
-	);
-	$self->options_menu($menu);
+	)
 }
 sub permanent_list {
 	$_[0]->{listmode} > 0
@@ -210,6 +210,7 @@ sub options_menu {
 			}
 		}
 	);
+	$menu
 }
 sub item { 
 	$_[0]->{item}=$_[1] if defined $_[1]; $_[0]->{item} 
@@ -430,34 +431,53 @@ sub commit {
 	print $output;
     $self->SUPER::commit();
 }
+sub test {
+	given (shift) {
+		when (_gt 1) {
+			my $ec = new EntryComposite(
+				'file', $_entries, 
+				'history_db', $_history, 
+				'label', '<<--History-->>');
+			relaunch $ec;
+		}
+		when (_gt 0) {
+			my @paths = sort split( /:/, $ENV{PATH});
+			my $ec = new EntryComposite(
+				'title', 'Environment', 
+				'label', 'PATH', 
+				'params', \@paths, 
+				'options', {"list-multiple" => 1});
+			$ec->give(cwd());
+			relaunch $ec;
+		}
+		when (_lt -1) {
+			my @paths = sort split( /:/, $ENV{PATH});
+			my $ec = new EntryComposite(
+				'title', 'Environment', 
+				'label', 'path', 
+				'params', \@paths);
+			$ec->give(cwd());
+			relaunch $ec;
+		}
+		when (_lt 0) {
+			my $ec = new EntryComposite(
+				'title', 'Environment', 
+				'label', 'Current');
+			$ec->give(cwd());
+			relaunch $ec;
+		}
+		default {
+			1
+		}
+	}
+}
 given (_getenv_once('test', 0)) {
-	when (_gt 1) {
-		my $ec = new EntryComposite('file', $_entries, 'history_db', $_history, 'label', '<<--History-->>');
-		relaunch $ec;
-	}
-	when (_gt 0) {
-		my @paths = sort split( /:/, $ENV{PATH});
-		my $ec = new EntryComposite('title', 'Environment', 'label', 'PATH', 'params', \@paths, 
-			'options', {"list-multiple" => 1});
-		$ec->give(cwd());
-		relaunch $ec;
-	}
-	when (_lt 0) {
-		my $ec = new EntryComposite('title', 'Environment', 'label', 'Current');
-		$ec->give(cwd());
-		relaunch $ec;
-	}
-	when (_lt -1) {
-		my @paths = sort split( /:/, $ENV{PATH});
-		my $ec = new EntryComposite('title', 'Environment', 'label', 'path', 'params', \@paths);
-		$ec->give(cwd());
-		relaunch $ec;
-	}
-	when (_lt -2) {
-		my $ec = new EntryComposite('file', $_entries, 'history_db', $_history, 'label', '<<--History-->>');
-		relaunch $ec;
+	when (_gt 2) {
+		for (my $t = 2; $t > -3; $t--) {
+			test($t);
+		}
 	}
 	default {
-		1
+		test($_);
 	}
 }
