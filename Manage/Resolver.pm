@@ -52,13 +52,13 @@ use Manage::Utils qw(
 	_split_on_whitespace
 	@_separator
 	_realpath
+	@_inputs
+	_set_inputs
+	_inputs_title
 );
 require Manage::Settings;
 use Exporter::Easy (
 	OK => [ qw(
-		@inputs
-		set_inputs
-		inputs_title
 		%dollars
 		has_dollar
 		is_dollar
@@ -78,18 +78,6 @@ use Exporter::Easy (
 		devels
 	)],
 );
-sub set_inputs {
-	@inputs = @ARGV ? @ARGV : _getenv('inputs', sub{ () })
-}
-our @inputs = set_inputs;
-sub inputs_title {
-	my $title = _value_or_else '',shift;
-	$title .=  $_separator[0];
-	if (@inputs) {
-		$title .= "on " . ($#inputs > 0 ? scalar(@inputs) . " given items" : "'$inputs[0]'");
-	}
-	$title
-}
 sub clipdir {
 	_make_sure_dir catdir(tmpdir, "clip")
 }
@@ -173,14 +161,14 @@ sub detect_dollar {
 }
 sub is_input {
 	my $amount = shift;
-	my @gin = @_ < 1 ? @inputs : @_;
+	my @gin = @_ < 1 ? @_inputs : @_;
 	my $a = _is_array_ref($amount) ? $amount->[0] : $amount;
 	looks_like_number($a) && $a >= 0 && $a < @gin + 1 ?
 		$a : -1
 }
 sub get_dollars {
 	my $input = shift;
-	my @gin = @_ < 1 ? @inputs : @_;
+	my @gin = @_ < 1 ? @_inputs : @_;
 	%dollars = ();
 	detect_dollar ($input, sub {
 		my $key = $_[0];
@@ -211,12 +199,12 @@ sub set_dollars {
 }
 sub place_inputs {
 	my $input = shift;
-	my @gin = @_ < 1 ? @inputs : @_;
+	my @gin = @_ < 1 ? @_inputs : @_;
 	get_dollars $input, @gin;
 	set_dollars $input
 }
 sub inputs_meet_dollars {
-	@inputs == keys %dollars
+	@_inputs == keys %dollars
 }
 my ($obj, $window, $width);
 sub inject {
@@ -318,7 +306,7 @@ sub resolve_dollar {
 			-variable => \$choice)->grid(-row => $row, -column => $col++);
 		($row,$col) = (1,0);
 		my $btn = _install_menu_button $frm, 'Inputs', sub{}, 
-			sub{_replace_text($en, $_[0], 1)}, @inputs;
+			sub{_replace_text($en, $_[0], 1)}, @_inputs;
 		$btn->grid(-row => $row, -column => $col++);
 		my $contents = 0;
 		my $clip_command = sub {
@@ -364,14 +352,14 @@ sub resolve_dollar {
 }
 given (_getenv_once('test', 0)) {
 	when (_gt 1) {
-		Manage::Resolver::inject({window => _tkinit(1)});
-		push @inputs, "/tmp/clip", "*", ".*";
+		inject({window => _tkinit(1)});
+		push @_inputs, "/tmp/clip", "*", ".*";
 		my $input = "find \${1:dir} -name \"\${2:file}\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
 #		say place_inputs($input);
 		say resolve_dollar($input);
 	}
 	when (_gt 0) {
-		Manage::Resolver::inject({window => _tkinit(1)});
+		inject({window => _tkinit(1)});
 		say resolve_dollar("\${PATTERN}");
 	}
 	default {

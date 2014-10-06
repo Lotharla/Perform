@@ -9,21 +9,16 @@ use Cwd qw(abs_path);
 use lib dirname(abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
-	_chomp
-	_combine
 	_getenv 
 	_value_or_else 
 	_text_info
-);
-use Manage::Resolver qw(
-	@inputs
-	inputs_title
+	@_inputs
+	_inputs_title
 );
 use Manage::PageComposite;
-my $params = @inputs ? \@inputs : \@ARGV;
+my $title = _getenv('title', "View files ...");
 (new PageComposite(
-	title => inputs_title(_getenv('title', "View files ...")), 
-	width => _getenv('width'),
-	params => $params
+	title => $title eq 'Clipper' ? $title : _inputs_title($title), 
+	params => \@_inputs
 ))->relaunch;
 

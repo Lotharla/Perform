@@ -6,7 +6,7 @@ use feature qw(say switch);
 use Tk;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
-use lib dirname(abs_path $0);
+use lib dirname(abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
 	catfile
@@ -28,15 +28,16 @@ use Manage::Utils qw(
 	_ask_file
 	$_entries $_history
 	_top_widget
+	_xselection
+	@_inputs
+	_inputs_title
 );
 use Manage::Resolver qw(
-	@inputs
-	inputs_title
 	next_clip
 );
 use Manage::Composer;
 sub perform {
-	my $cmd = catfile(dirname(__FILE__), "perform.pl");
+	my $cmd = catfile(dirname(__FILE__), "performer.pl");
 	$cmd = sprintf "env %s @_", $cmd;
 	`$cmd`
 }
@@ -46,7 +47,7 @@ my $command = _capture_output(
 	sub {
 		my $label = _getenv('label', '');
 		$composer = new Composer( 
-			title => inputs_title($title),
+			title => _inputs_title($title),
 			label => $label,
 			file => $_entries,
 			history_db => $_history,

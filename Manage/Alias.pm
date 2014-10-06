@@ -28,6 +28,7 @@ use Manage::Utils qw(
 	@_separator
 	_visit_sorted_tree
 	_dimension
+	@_inputs
 );
 use Manage::PersistHash;
 use Manage::Settings;
@@ -36,7 +37,6 @@ use Manage::Resolver qw(
 	make_value
 	place_inputs
 	resolve_dollar
-	@inputs
 );
 use Exporter::Easy (
 	OK => [ qw(

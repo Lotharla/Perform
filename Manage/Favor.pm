@@ -247,7 +247,7 @@ given (_getenv_once('_test', 0)) {
 				"view" => [
 					0,
 					"/home/lotharla/fugue-icons-3.5.6/icons/binocular.png",
-					"/home/lotharla/work/tools/viewer.pl \$0"],
+					dirname(dirname abs_path __FILE__) . "viewer.pl \$0"],
 				"compare" => [
 					0,
 					"/home/lotharla/fugue-icons-3.5.6/icons/documents.png",

@@ -3,13 +3,14 @@ use strict;
 use warnings;
 no warnings 'experimental';
 use feature qw(say switch);
-use File::Basename qw(dirname basename);
+use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(abs_path __FILE__);
 use Manage::Utils qw(
 	dump pp
 	ok is isnt is_deeply done_testing
 	_eq _ne _gt _lt
+	basename
 	catfile
 	tmpdir
 	_combine

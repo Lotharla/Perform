@@ -22,12 +22,12 @@ use Manage::Utils qw(
 	@_separator
 	_clipboard
 	_button
+	@_inputs 
+	_set_inputs
+	_inputs_title
 );
 use Manage::Resolver qw(
 	has_dollar
-	@inputs 
-	set_inputs
-	inputs_title
 	place_inputs
 	inputs_meet_dollars
 	resolve_dollar
@@ -104,7 +104,7 @@ sub initialize {
 	$submenu = _install_menu($menu, 
 		sub {
 			my $dollar = has_dollar($self->item);
-			my $inputs = @inputs > 0;
+			my $inputs = @_inputs > 0;
 			$submenu->entryconfigure(4, -state => $inputs ? 'normal' : 'disabled');
 			$submenu->entryconfigure(5, -state => $inputs && $dollar ? 'normal' : 'disabled');
 			$submenu->entryconfigure(6, -state => $dollar ? 'normal' : 'disabled');
@@ -122,13 +122,13 @@ sub initialize {
 			my $text = _text_dialog $self->{window}, \@dim, "Input from clipboard", '';
 			if ($text) {
 				_setenv('inputs', _value_or_else($text,1,$text));
-				set_inputs();
+				_set_inputs();
 				$self->update_title;
 			}
 		},
 		"Input ...", sub {
 			my @dim = $self->dimension("text");
-			if (_text_dialog $self->{window}, \@dim, 'Inputs', \@inputs) {
+			if (_text_dialog $self->{window}, \@dim, 'Inputs', \@_inputs) {
 				$self->update_title;
 			}
 		}, 
@@ -180,7 +180,7 @@ sub options_menu {
 sub update_title {
 	my $self = shift;
 	my @parts = split /$_separator[0]/, $self->{window}->title;
-	$self->{window}->title(inputs_title _getenv('title', $parts[0]));
+	$self->{window}->title(_inputs_title _getenv('title', $parts[0]));
 }
 sub populate {
 	my $self = shift;
@@ -191,7 +191,7 @@ sub populate {
 		Manage::Favor::inject($self);
 		Manage::Resolver::inject($self);
 	}
-	$self->pre_select($inputs[0]);
+	$self->pre_select($_inputs[0]);
 }
 sub pre_select {
 	my $self = shift;
@@ -205,6 +205,8 @@ sub pre_select {
 				$found = place_inputs($found);
 				$self->give($found);
 			}
+		} else {
+			$self->give("\$0");
 		}
 	}
 }

@@ -19,6 +19,8 @@ use Exporter::Easy (
 		dump 
 		pp
 		looks_like_number
+		dirname 
+		basename
 		tmpdir
 		catfile
 		catdir
@@ -62,6 +64,7 @@ use Exporter::Easy (
 		_interpolate_rex
 		_subst_rex
 		_flip_hash
+		_xselection
 		_clipboard
 		_get_clipboard
 		_persist
@@ -129,7 +132,10 @@ use Exporter::Easy (
 		_top_widget
 		_widget_info
 		_find_widget
-		$_entries $_history
+		$_entries $_history $_words
+		@_inputs
+		_set_inputs
+		_inputs_title
 	)],
 );
 sub _max ($$) { $_[$_[0] < $_[1]] }
@@ -505,10 +511,15 @@ sub _contents_of_file {
 		$file = $file->[0];
 	}
 	my $chars = shift;
+	my $func = shift;
 	open my $fh, '<' . ($encode ? ":$encode" : ''), $file || die "Can't open file : $!\n";
 	my $contents;
 	if (_value_or_else(0, $chars) > 0) {
 		read $fh, $contents, $chars
+	} elsif (_is_code_ref $func) {
+		while (<$fh>) {
+			last unless _call([$func, $_]) 
+		}
 	} else {
 		no warnings;
 		local $/ = undef;    # slurp mode
@@ -545,8 +556,8 @@ sub _tables {
 	my @tables;
 	my $dbfile = shift;
 	if (_is_sqlite_file $dbfile) {
-		my $dbh = _connect($_history);
-		my $stmt = qq(select name,sql from sqlite_master where type = 'table');
+		my $dbh = _connect($dbfile);
+		my $stmt = qq(SELECT name,sql FROM sqlite_master WHERE type = 'table');
 		my $sth = $dbh->prepare( $stmt );
 		$sth->execute() or die $DBI::errstr;
 		while (my @row = $sth->fetchrow_array()) {
@@ -614,7 +625,7 @@ sub _call {
 	my $func = shift;
 	given (ref $func) {
 		when ('CODE') {
-			$func->(@_);
+			$func->(@_)
 		}
 		when ('ARRAY') {
 			my @array = @$func;
@@ -648,12 +659,18 @@ sub _escapeDoubleQuotes {
 sub _terminalize {
 	my $output = _flatten $_[0];
 	$output = _escapeDoubleQuotes $output;
-	$output = "bash -c '" . $output . " | less'";
+	$output = "bash -c '" . $output . " 2>&1 | less'";
 	my $terminal = _chomp(`gconftool-2 -g /desktop/gnome/applications/terminal/exec`);
 	return _combine( "$terminal", "-t", sprintf("\"%s\"", $output), "-e", "\"$output\"" );
 }
 sub _perform {
-	exec @_;
+	use Try::Tiny;
+	my @args = @_;
+	try {
+		exec @args or die $!;
+	} catch {
+        _text_info(undef, "Error in \'exec @args\'", "$_");
+	};
 }
 sub _perform_2 {
 	no warnings 'once';
@@ -682,9 +699,10 @@ sub _check_output {
 		ok($output =~ $_, $output)
 	}
 }
-sub _clipboard {
+sub _xselection {
+	my $type = shift;
 	my $set = @_ > 0;
-	my $cmd = sprintf "xclip -selection clipboard -%s", $set ? 'i' : 'o';
+	my $cmd = sprintf "xclip -selection $type -%s", $set ? 'i' : 'o';
 	my $pid = open3(\*CHLD_IN, \*CHLD_OUT, \*CHLD_ERR, "$cmd") or die "open3() failed $!";
 	if ($set) {
 		print CHLD_IN "@_";
@@ -696,6 +714,9 @@ sub _clipboard {
 	use Time::HiRes;
 	Time::HiRes::sleep(0.5);	
 	waitpid($pid, 1);
+}
+sub _clipboard {
+	_xselection 'clipboard', @_
 }
 sub _get_clipboard {
 	_capture_output sub{ _clipboard }
@@ -1190,5 +1211,18 @@ sub _dimension {
 }
 our $_entries = catfile dirname(dirname  __FILE__), ".entries";
 our $_history = catfile dirname(dirname  __FILE__), ".history";
+our $_words = "/usr/share/dict/words";
+our @_inputs = _set_inputs();
+sub _set_inputs {
+	@_inputs = @ARGV ? @ARGV : _getenv( 'inputs', sub{()} )
+}
+sub _inputs_title {
+	my $title = _value_or_else '',shift;
+	$title .=  $_separator[0];
+	if (@_inputs) {
+		$title .= "on " . ($#_inputs > 0 ? scalar(@_inputs) . " given items" : "'$_inputs[0]'");
+	}
+	$title
+}
 1;
 

@@ -6,7 +6,7 @@ use feature qw(say switch);
 use Tk;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
-use lib dirname(abs_path $0);
+use lib dirname(abs_path __FILE__);
 use Manage::Utils qw(
 	_getenv 
 );

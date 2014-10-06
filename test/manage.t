@@ -67,14 +67,14 @@ use Manage::Utils qw(
 	_connect
 	_make_sure_table
 	_tables
+	@_inputs 
+	_inputs_title
 );
 use Manage::Resolver qw(
 	is_dollar has_dollar dollar_amount dollar_attr
 	make_dollar 
 	make_value
 	get_dollars set_dollars detect_dollar 
-	@inputs 
-	inputs_title
 	place_inputs
 	devels
 );
@@ -184,13 +184,13 @@ undef $acca;
 is_deeply _value_or_else(undef, $acca), $acca;
 @acca = _value_or_else(sub{()}, $acca);
 is @acca, 0;
-@inputs = qw/I didn't do it/;
+@_inputs = qw/I didn't do it/;
 is place_inputs("\$1"), "I";
 is place_inputs("\$0") =~ s/\t/ /gr, $didnt;
 my $pattern = "find \$4 -name \"\${FILES}\" -print | xargs grep \"\$2\" 2>/dev/null";
 is place_inputs($pattern), 
 	"find it -name \"\" -print | xargs grep \"didn't\" 2>/dev/null";
-push @inputs, '';
+push @_inputs, '';
 is place_inputs(_combine($pattern, "\$5")), 
 	"find it -name \"\" -print | xargs grep \"didn't\" 2>/dev/null\t";
 my $term = `gconftool-2 -g /desktop/gnome/applications/terminal/exec`;
@@ -201,8 +201,8 @@ my $temp = {"\${DIR}"=>"xxx","\${FILES}"=>"yyy","\$123"=>"zzz"};
 is(detect_dollar($pattern, sub { $temp->{shift(@_)} }), 
 	"find xxx -name \"yyy\" -print | xargs grep \"zzz\" 2>/dev/null");
 my $dir = abs_path $0;
-@inputs = ();
-push @inputs, $dir, "**/*.*";
+@_inputs = ();
+push @_inputs, $dir, "**/*.*";
 $pattern = "find \${1:dir} -name \"\$2\" -print | xargs grep -e \"\${PATTERN}\" 2>/dev/null";
 $dir = dirname $dir;
 is place_inputs($pattern), 
@@ -244,7 +244,7 @@ is @parts, 2;
 is resolve_alias($parts[0]), $doh;
 is resolve_alias($parts[1]), $didnt;
 %alias = (
-	ant   => "bash /home/lotharla/work/bin/ant-or-make.sh \"\$1\"",
+	ant   => "bash ~/work/bin/ant-or-make.sh \"\$1\"",
 	bash  => "bash \"\$1\"",
 	chmod => {
 			   "chmod a+x" => "chmod a+x \"\$1\"",
@@ -307,14 +307,14 @@ ok !_is_value("");
 ok _is_value(0);
 ok _is_value([]);
 ok !_is_value(());
-@inputs=();
-ok _is_value(\@inputs);
+@_inputs=();
+ok _is_value(\@_inputs);
 _setenv 'inputs', "xxx";
-@inputs = _getenv 'inputs';
-ok _string_contains inputs_title('title'), "on 'xxx'", -1;
+@_inputs = _getenv 'inputs';
+ok _string_contains _inputs_title('title'), "on 'xxx'", -1;
 _setenv 'inputs', "xxx\nzzz";
-@inputs = _getenv 'inputs';
-ok _string_contains inputs_title('title'), "on 2 given items", -1;
+@_inputs = _getenv 'inputs';
+ok _string_contains _inputs_title('title'), "on 2 given items", -1;
 _setenv 'inputs', undef;
 is _getenv('inputs', 'x'), 'x';
 _setenv 'inputs', '';
@@ -322,8 +322,8 @@ is _getenv('inputs', 'x'), 'x';
 _setenv 'inputs', 0;
 is _getenv('inputs', 1), 0;		#	!!!
 delete $ENV{'inputs'};
-@inputs = _getenv('inputs', sub{()});
-is @inputs, 0;
+@_inputs = _getenv('inputs', sub{()});
+is @_inputs, 0;
 $dir = dirname(dirname abs_path $0);
 ok _dir_exists($dir);
 $_ = scalar(@_ = _extract_from(dirname(dirname abs_path $0) . "/Manage/Utils.pm", "sub\\s+(\\w+)"));
@@ -487,11 +487,6 @@ unlink $file;
 	$data{$_} = $history{$_} foreach keys %history;
 }
 =cut
-_make_sure_table($_history,'texts', 
-	"signature" => "TEXT",
-	"date" => "INTEGER",
-	"text" => "TEXT",
-);
 ok _index_of('texts', _tables $_history) > -1;
 $p = dirname(__FILE__);
 ok !_string_contains($p, '~');

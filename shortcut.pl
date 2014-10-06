@@ -5,8 +5,12 @@ no warnings 'experimental';
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(abs_path __FILE__);
-use Manage::PageComposite;
-(new PageComposite(
-	title => 'Clipper', 
-))->relaunch;
+use Manage::Utils qw(
+	dump pp
+	_getenv 
+	_value_or_else 
+	_text_info
+	@_inputs
+	_xselection
+);
 
